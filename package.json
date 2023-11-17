@@ -1,0 +1,23 @@
+{
+  "name": "get_it",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/plocket/get_it.git"
+  },
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/plocket/get_it/issues"
+  },
+  "homepage": "https://github.com/plocket/get_it#readme",
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "puppeteer": "^21.5.2"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "state_path": "state.json",
+  "channels": ["clean-slate"],
+  "messages_path": "messages.json",
+  "threads_path": "threads.json",
+  "viewport_height": 2000
+}
