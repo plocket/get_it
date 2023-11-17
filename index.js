@@ -6,15 +6,10 @@ require(`dotenv`).config();
 // const msg_ids = Array.from(containers).map((item) => {return item.id});
 
 let config = JSON.parse(fs.readFileSync(`./config.json`));
-console.log(config)
+// console.log(config)
 let state = JSON.parse(fs.readFileSync(`./${ config.state_path }`));
-console.log(state)
+// console.log(state)
 
-config.channels;
-// message groups html list path
-config.messages_path;
-// threads' strings by id object path
-config.threads_path;
 
 async function start() {
   log.debug(`start()`);
@@ -28,7 +23,8 @@ async function start() {
   const page = await browser.newPage();
 
   // Ignore the below. Keypress doesn't work either.
-  // Have to interact with the browser prompt manually for now
+  // Headless mode works fine, but headful mode will have
+  // to interact with the browser prompt manually for now
   /*  
   await page.setBypassServiceWorker(true);
   await page.setRequestInterception(true);
@@ -57,49 +53,44 @@ async function start() {
   });
   */
 
-  // Make very tall viewport?
+  // Make very big viewport?
   await page.setViewport({ height: config.viewport_height, width: 1000 });
   await log_in({ page });
-  // ms * s * m. Start with 20 seconds
+  // ms * s * m. Wait for page to load
   await page.waitForTimeout(1000 * 20);
 
   // for ( let channel_name of config.channels ) {
   //   if (!state.finished_channels.includes( channel_name )) {
       await go_to_channel({ page, channel_name: state.current_channel });
-      await scroll ({ page, distance: state.position });
       await collect_channel({ page, config, state });
   //   }
   // }
 
-  log.debug(1);
-
-  // ms, s, m
-  await page.waitForTimeout(1000 * 60 * 1);
+  // // ms * s * m
+  // await page.waitForTimeout(1000 * 60 * 1);
 
   browser.close();
 };
 
 async function log_in({ page }) {
   log.debug(`log_in()`);
-
   await page.goto(`https://cfa.slack.com/`, { waitUntil: `domcontentloaded` });
-  // Choose log in by email
+  // Choose to log in by email
   let [email_reponse] = await Promise.all([
     page.waitForNavigation({ waitUntil: `domcontentloaded` }),
     page.click(`input[type="submit"]`),
   ]);
-  // Authenticate
+  // Log in
   let response = await auth({ page });
-  log.debug( response );
   // Wait a little longer for load
   await page.waitForTimeout(1000 * 5);
-
   return page;
 };  // Ends log_in()
 
 async function auth({ page }) {
   await page.type(`input#email`, process.env.EMAIL);
   await page.type(`input#password`, process.env.PASSWORD);
+  // Go to workspace
   let [auth_reponse] = await Promise.all([
     page.waitForNavigation({ waitUntil: `domcontentloaded` }),
     page.click(`button[type="submit"]`),
@@ -122,13 +113,43 @@ async function collect_channel({
   */
   log.debug(`collect_channel()`);
 
-  // Collect everything on the page now
-  const messages = `.c-message_list`
+  // These must be outside the `while` scope
+  let position = state.position;
+  // both negative. -1000 - -100 = -900
+  let goal = config.goal_distance - position;
+  let starting = true;
 
-  const scroll_distance = config.viewport_height - 20;
-  await scroll ({ page, distance: scroll_distance });
+  await scroll_to_start({ page, state, config });
 
-  await page.waitForTimeout(1000 * 5);
+  while ( !await reached_goal({ page, position, goal }) ) {
+
+    // Collect currently existing elements
+    let msgs_data = await get_message_container_data({ page });
+    log.debug(msgs_data.html[0]);
+    log.debug(`reply_ids:`, msgs_data.reply_ids);
+
+    // let threads_by_id = await collect_threads({
+    //   page,
+    //   ids: msgs_data.reply_ids
+    // });
+
+    // save messages and threads data
+
+    // await page.waitForTimeout(1000 * 60 * 3);
+    // // elem = document.querySelector(`.c-message_list .c-scrollbar__hider`);
+    // // elem.scrollBy(0, -300000);
+
+    // prepare for next loop
+    // scroll to new position
+    position = await scroll({
+      page, position,
+      distance: -1 * (config.viewport_height - 20)
+    });
+
+    // save new start for next time??
+    save_state(`position`, position);
+  }
+
 
   // await page.evaluate(async ({
   //   config, state, funcs
@@ -168,21 +189,59 @@ async function collect_channel({
   // });
 };  // Ends collect_channel()
 
-async function scroll ({ page, distance }) {
-  let scroller_selector = `.c-message_list .c-scrollbar__hider`
-  let scroll_handle = await page.waitForSelector(scroller_selector);
-  // let scroll_handle = await page.$(scroller_selector);
-  await scroll_handle.evaluate( (elem, {distance}) => {
-    // document.querySelector(`.c-message_list .c-scrollbar__hider`).scrollBy(0, -980);
-    elem.scrollBy(0, (-1 * distance));
-  }, { distance });
-  await page.waitForTimeout(1000 * 1);
-}  // Ends collect_msgs()
 
-const reached_goal = function ({ position, goal }) {
-  let reached = (-1 * position) > (-1 * goal);
+async function scroll_to_start ({ page, state, config }) {
+  log.debug(`scroll_to_start()`);
+  // Page refuses to do it in one go, just goes a bit at a time.
+  let position = 0;
+  let goal = state.position;
+  while ( !await reached_goal({ page, position, goal }) ) {
+    position = await scroll({
+      page, position,
+      distance: -1 * (config.viewport_height - 20)
+    });
+  }
+};
+
+async function scroll ({ page, position, distance }) {
+  /** Returns new position int. distance is negative. */
+  log.debug(`scroll()`);
+  let scroller_handle = await page.waitForSelector(`.c-message_list .c-scrollbar__hider`);
+  await scroller_handle.evaluate( (elem, { distance }) => {
+    elem.scrollBy(0, (distance));
+  }, { distance });
+  await page.waitForTimeout(1000 * .5);
+  position += distance;
+  log.debug(`position: ${ position }`);
+  return position;
+}
+
+async function reached_goal ({ page, position, goal }) {
+  let reached = false;
+  let top = await page.$(`h1.p-message_pane__foreword__title`);
+  if ( top ) {
+    log.debug(`--- at top ---`);
+    reached = Boolean(top);
+  } else {
+    reached = Math.abs(position) >= Math.abs(goal);
+  }
   log.debug(`reached_goal(): position: ${ position }, goal: ${ goal }, reached: ${reached}`);
   return reached;
+}
+
+async function get_message_container_data ({ page }) {
+  log.debug(`get_message_container_data()`);
+  let handle = await page.waitForSelector(`.c-message_list`);
+  let data = await handle.evaluate( (elem) => {
+    let messages = document.querySelectorAll(`.c-message_list .c-virtual_list__item:has(.c-message__reply_count)`);
+    let reply_ids = Array.from(messages).map((item) => {return item.id});
+    return {
+      html: elem.outerHTML,
+      reply_ids,
+      // `#${id} .c-message__reply_count`).click()
+    }
+  });
+  return data;
 }
 
 async function collect_msgs (doc) {
@@ -200,8 +259,24 @@ async function collect_thread (doc) {
   // probably have to scroll here too, just down instead of up
 }
 
-const save_state = function (key, value) {
-  log.debug(`save_state()`);
+function save_data({ config, state, data }) {
+  log.debug(`save_data()`);
+
+  // message groups html list path
+  let messages_path = `data/${state.current_channel}/${config.messages_path}`;
+  let messages = JSON.parse(fs.readFileSync(messages_path));
+  messages.unshift(data.html);
+  fs.writeFileSync(messages_path, JSON.stringify(messages));
+
+  // threads' strings by id object path
+  let threads_path = `data/${state.current_channel}/${config.threads_path}`;
+  let threads = JSON.parse(fs.readFileSync(threads_path));
+  threads = { ...threads, ...data.threads };
+  fs.writeFileSync(threads_path, JSON.stringify(threads));
+}
+
+function save_state (key, value) {
+  log.debug(`save_state() key: ${key}`);
 }
 
 const log = {
