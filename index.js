@@ -142,7 +142,7 @@ async function collect_channel({
     // prepare for next loop
     // scroll to new position
     position = await scroll({
-      page, position,
+      page, position, goal,
       distance: -1 * (config.viewport_height - 20)
     });
 
@@ -197,26 +197,40 @@ async function scroll_to_start ({ page, state, config }) {
   let goal = state.position;
   while ( !await reached_goal({ page, position, goal }) ) {
     position = await scroll({
-      page, position,
+      page, position, goal,
       distance: -1 * (config.viewport_height - 20)
     });
   }
 };
 
-async function scroll ({ page, position, distance }) {
+async function scroll ({ page, position, goal, distance }) {
   /** Returns new position int. distance is negative. */
-  log.debug(`scroll()`);
+  log.debug(`scroll():`, distance);
+  // Don't overshoot
+  // goal = 10, position = 1, distance = 20, desired = 9
+  // goal = 100, position = 1, distance = 20, desired = 20
+  // min( 10 - 1, 20) = 9, min( 100 - 1, 20) = 20
+  // To negative...?
+  let direction = Math.sign(distance);  // -1 for up, 1 for down
+  distance = direction * Math.min(
+    Math.abs(goal) - Math.abs(position),
+    Math.abs(distance)
+  )
+  // Scroll
   let scroller_handle = await page.waitForSelector(`.c-message_list .c-scrollbar__hider`);
   await scroller_handle.evaluate( (elem, { distance }) => {
-    elem.scrollBy(0, (distance));
+    elem.scrollBy(0, distance);
   }, { distance });
+  // Wait for load?
   await page.waitForTimeout(1000 * .5);
+  // Move forward
   position += distance;
-  log.debug(`position: ${ position }`);
+  log.debug(`scrolled position: ${ position }`);
   return position;
 }
 
 async function reached_goal ({ page, position, goal }) {
+  log.debug(`reached_goal()`);
   let reached = false;
   let top = await page.$(`h1.p-message_pane__foreword__title`);
   if ( top ) {
