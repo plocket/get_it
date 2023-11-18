@@ -128,10 +128,10 @@ async function collect_channel({
     log.debug(msgs_data.html[0]);
     log.debug(`reply_ids:`, msgs_data.reply_ids);
 
-    // let threads_by_id = await collect_threads({
-    //   page,
-    //   ids: msgs_data.reply_ids
-    // });
+    let threads_by_id = await collect_threads({
+      page,
+      ids: msgs_data.reply_ids
+    });
 
     // save messages and threads data
 
@@ -206,7 +206,7 @@ async function scroll_to_start ({ page, state, config }) {
 async function scroll ({ page, position, goal, distance }) {
   /** Returns new position int. distance is negative. */
   log.debug(`scroll():`, distance);
-  // Don't overshoot
+  // Don't overshoot. Math justification:
   // goal = 10, position = 1, distance = 20, desired = 9
   // goal = 100, position = 1, distance = 20, desired = 20
   // min( 10 - 1, 20) = 9, min( 100 - 1, 20) = 20
@@ -258,14 +258,27 @@ async function get_message_container_data ({ page }) {
   return data;
 }
 
-async function collect_msgs (doc) {
-  log.debug(`collect_msgs()`);
-  let msg_container = document.querySelector(`.c-message_list`);
-}  // Ends collect_msgs()
-
-async function collect_threads (doc) {
+async function collect_threads ({ page, ids }) {
   log.debug(`collect_threads()`);
-  let msg_elems = document.querySelectorAll(`.c-message_list .c-virtual_list__item`);
+  // let msg_elems = document.querySelectorAll(`.c-message_list .c-virtual_list__item`);
+  let threads = {};
+  // Click on each thread
+  for ( let id of ids ) {
+    await open_thread({ page, id });
+  }
+}
+
+async function open_thread ({ page, id }) {
+  /** Note: Can't use page.$() as querySelectorAll won't work with these
+  *   ids (Example id: 1668547054.805359).
+  */
+  log.debug(`open_thread()`);
+  await page.evaluate((id) => {
+    let elem = document.getElementById(id);
+    elem.querySelector('.c-message__reply_count').click();
+  }, id);
+  
+  await page.waitForTimeout(1000 * 30);
 }
 
 async function collect_thread (doc) {
