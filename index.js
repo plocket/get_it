@@ -6,9 +6,7 @@ require(`dotenv`).config();
 // const msg_ids = Array.from(containers).map((item) => {return item.id});
 
 let config = JSON.parse(fs.readFileSync(`./config.json`));
-// console.log(config)
 let state = JSON.parse(fs.readFileSync(`./${ config.state_path }`));
-// console.log(state)
 
 
 async function start() {
@@ -56,8 +54,7 @@ async function start() {
   // Make very big viewport?
   await page.setViewport({ height: config.viewport_height, width: 1000 });
   await log_in({ page });
-  // ms * s * m. Wait for page to load
-  await page.waitForTimeout(1000 * 20);
+  await wait_for_load({ page, seconds: 20 });
 
   // for ( let channel_name of config.channels ) {
   //   if (!state.finished_channels.includes( channel_name )) {
@@ -66,8 +63,7 @@ async function start() {
   //   }
   // }
 
-  // // ms * s * m
-  // await page.waitForTimeout(1000 * 60 * 1);
+  // await wait_for_load({ page, seconds: 60 * 1 });
 
   browser.close();
 };
@@ -82,8 +78,7 @@ async function log_in({ page }) {
   ]);
   // Log in
   let response = await auth({ page });
-  // Wait a little longer for load
-  await page.waitForTimeout(1000 * 5);
+  await wait_for_load({ page, seconds: 5 });
   return page;
 };  // Ends log_in()
 
@@ -135,7 +130,7 @@ async function collect_channel({
 
     // save messages and threads data
 
-    // await page.waitForTimeout(1000 * 60 * 3);
+    // await wait_for_load({ page, seconds: 60 * 3 });
     // // elem = document.querySelector(`.c-message_list .c-scrollbar__hider`);
     // // elem.scrollBy(0, -300000);
 
@@ -221,8 +216,7 @@ async function scroll ({ page, position, goal, distance }) {
   await scroller_handle.evaluate( (elem, { distance }) => {
     elem.scrollBy(0, distance);
   }, { distance });
-  // Wait for load?
-  await page.waitForTimeout(1000 * .5);
+  await wait_for_load({ page, seconds: .5 });
   // Move forward
   position += distance;
   log.debug(`scrolled position: ${ position }`);
@@ -278,12 +272,18 @@ async function open_thread ({ page, id }) {
     elem.querySelector('.c-message__reply_count').click();
   }, id);
   
-  await page.waitForTimeout(1000 * 30);
+  await wait_for_load({ page, seconds: 3 });
 }
 
 async function collect_thread (doc) {
   log.debug(`collect_thread()`);
   // probably have to scroll here too, just down instead of up
+}
+
+async function wait_for_load ({ page, seconds }) {
+  /** `seconds` is ms * s * m. Wait for next part of page to load. **/
+  log.debug(`wait_for_load()`);
+  await page.waitForTimeout( 1000 * seconds );
 }
 
 function save_data({ config, state, data }) {
