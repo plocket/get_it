@@ -9,7 +9,9 @@ that gradually because of the way Slack behaves.
 When doing this, I have a bug and I can't find its source. It
 seems to me like it must have something to do with scrolling -
 an element that was just found on the page no longer appears to
-be on the page.
+be on the page. Thing is, as far as I can tell there's no scrolling
+in between when the element was first found on the page and when
+I next look for it.
 
 It only happens when the desired start position for scraping is
 at or below -1970. I think that's just chance - more to do with what's
