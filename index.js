@@ -18,8 +18,6 @@ async function start() {
   // Make very big viewport?
   await page.setViewport({ height: config.viewport_height, width: 1000 });
   await log_in({ page });
-  await wait_for_load({ page, seconds: 20 });
-
   await go_to_channel({ page, channel_name: state.current_channel });
   await collect_channel({ page, config, state });
 
@@ -43,11 +41,12 @@ async function log_in({ page }) {
 async function auth({ page }) {
   await page.type(`input#email`, process.env.EMAIL);
   await page.type(`input#password`, process.env.PASSWORD);
-  // Go to workspace
+  // Submit and go to workspace
   let [auth_reponse] = await Promise.all([
     page.waitForNavigation({ waitUntil: `domcontentloaded` }),
     page.click(`button[type="submit"]`),
   ]);
+  await wait_for_load({ page, seconds: 20 });
   return auth_reponse;
 }
 
@@ -152,7 +151,7 @@ async function scroll ({ page, position, goal, distance }) {
   await scroller_handle.evaluate( (elem, { distance }) => {
     elem.scrollBy(0, distance);
   }, { distance });
-  await wait_for_load({ page, seconds: .5 });
+  await wait_for_movement({ page, seconds: .5 });
   // Move forward
   position += distance;
   log.debug(`scrolled distance: ${distance}, position: ${ position }`);
@@ -209,7 +208,7 @@ async function open_thread ({ page, id }) {
     let elem = document.getElementById(id);
     elem.querySelector('.c-message__reply_count').click();
   }, id);
-  await wait_for_load({ page, seconds: 1 });
+  await wait_for_movement({ page, seconds: 1 });
   return await page.waitForSelector(`div[data-qa="threads_flexpane"]`);
 }
 
@@ -265,21 +264,27 @@ async function get_thread_contents_and_scroll ({ page, thread_handle }) {
     scroller.scrollBy(0, scroller.clientHeight );
     return html
   });
-  await wait_for_load({ page, seconds: 1 });
+  await wait_for_movement({ page, seconds: 1 });
   return thread_contents;
 }
 
 async function close_thread ({ page, thread_handle }) {
   /** The width of the viewport is affected by opening a thread,
-  *   scrolling the messages. Undo that */
+  *   scrolling the messages. Undo that. */
   await thread_handle.evaluate((elem) => {
     elem.querySelector('button[data-qa="close_flexpane"]').click();
   });
-  await wait_for_load({ page, seconds: 1 });
+  await wait_for_movement({ page, seconds: 1 });
+}
+
+async function wait_for_movement ({ page, seconds }) {
+  /** Wait, but with a clearer name. **/
+  log.debug(`wait_for_movement()`);
+  await wait_for_load({ page, seconds });
 }
 
 async function wait_for_load ({ page, seconds }) {
-  /** Wait, but with a clear name. **/
+  /** Wait, but with a clearer name. **/
   log.debug(`wait_for_load()`);
   await page.waitForTimeout( 1000 * seconds );
 }
