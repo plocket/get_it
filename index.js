@@ -2,76 +2,35 @@ const puppeteer = require(`puppeteer`);
 const fs = require(`fs`);
 require(`dotenv`).config();
 
-// const MSG_ITEMS_SELECTOR = `.c-message_list .c-virtual_list__item`;
-// const msg_ids = Array.from(containers).map((item) => {return item.id});
-
 let config = JSON.parse(fs.readFileSync(`./config.json`));
 let state = JSON.parse(fs.readFileSync(`./${ config.state_path }`));
-
+// state.position: -1999 works
+// state.position: -1 breaks
 
 async function start() {
   log.debug(`start()`);
 
   const browser = await puppeteer.launch({
     // Have to interact with the browser prompt manually
-    headless: false, //!process.env.DEBUG,
+    headless: !process.env.DEBUG,
     devtools: process.env.DEBUG,
-    // args: ['--disable-features=ServiceWorker'],
   });
   const page = await browser.newPage();
-
-  // Ignore the below. Keypress doesn't work either.
-  // Headless mode works fine, but headful mode will have
-  // to interact with the browser prompt manually for now
-  /*  
-  await page.setBypassServiceWorker(true);
-  await page.setRequestInterception(true);
-
-  const client = await page.target().createCDPSession();
-  await client.send("Network.enable");  // Must enable network.
-  await client.send("Network.setBypassServiceWorker", { bypass: true });
-  await page.setRequestInterception(true);
-  page.on('request', (req) => {
-    log.debug(`--------- req`);
-    // log.debug(req);
-    log.debug(req.resourceType());
-    log.debug(req.url());
-    // if (['script', 'fetch', 'xhr'].includes(req.resourceType())) {
-    //   log.debug(req.url());
-      // if (req.url().includes('service-worker')) {
-      if (req.url().includes('service-worker')
-          || req.url().includes('cookielaw.org')) {
-        req.abort();
-      } else {
-        req.continue();
-      }
-    // } else {
-    //   req.continue();
-    // }
-  });
-  */
 
   // Make very big viewport?
   await page.setViewport({ height: config.viewport_height, width: 1000 });
   await log_in({ page });
   await wait_for_load({ page, seconds: 20 });
 
-  // for ( let channel_name of config.channels ) {
-  //   if (!state.finished_channels.includes( channel_name )) {
-      await go_to_channel({ page, channel_name: state.current_channel });
-      await collect_channel({ page, config, state });
-  //   }
-  // }
-
-  // // ms * s * m
-  // await wait_for_load({ page, seconds: 60 * 1 });
+  await go_to_channel({ page, channel_name: state.current_channel });
+  await collect_channel({ page, config, state });
 
   browser.close();
 };
 
 async function log_in({ page }) {
   log.debug(`log_in()`);
-  await page.goto(`https://cfa.slack.com/`, { waitUntil: `domcontentloaded` });
+  await page.goto(process.env.WORKSPACE, { waitUntil: `domcontentloaded` });
   // Choose to log in by email
   let [email_reponse] = await Promise.all([
     page.waitForNavigation({ waitUntil: `domcontentloaded` }),
@@ -109,21 +68,23 @@ async function collect_channel({
   */
   log.debug(`collect_channel()`);
 
+  // Bug: this might be causing the problem, though I don't know how
   await scroll_to_start({ page, state, config });
 
-  // These must be outside the `while` scope
   let position = state.position;
   // both negative makes math work. -1000 - -100 = -900
   let goal = config.goal_distance - position;
+
+  // These must be outside the `while` scope
   let reached_goal = await reached_channel_goal({ page, position, goal });
   // Collect at least two rounds of messages
-  let first = true;
+  let first_round = true;
   let do_final = true;
 
-  while ( first || do_final || !reached_goal ) {
+  while ( first_round || do_final || !reached_goal ) {
     // Will have collected at least once for this channel
     // From now on, use position and goal to determine completion
-    first = false;
+    first_round = false;
 
     // Collect currently existing elements
     let messages = await get_message_container_data({ page });
@@ -131,6 +92,9 @@ async function collect_channel({
     log.debug(`reply_ids:`, messages.reply_ids);
 
     // Get thread data for current elements
+    
+    // Bug: An element with a reply id no longer exists when we go
+    // to collect one of the threads.
     let threads = await collect_threads({
       page,
       ids: messages.reply_ids,
@@ -147,8 +111,9 @@ async function collect_channel({
     // scroll to new position
     position = await scroll({
       page, position, goal,
-      distance: -1 * (config.viewport_height - 20)
+      distance: -1 * (config.viewport_height - 20)  // -1980
     });
+
     // Check if need one do_final round after the last scroll
     // If it's a duplicate, that's fine for our purposes
     reached_goal = await reached_channel_goal({ page, position, goal });
@@ -157,44 +122,6 @@ async function collect_channel({
     // save new start for next run of script
     save_state(`position`, position);
   }  // ends while need to collect
-
-
-  // await page.evaluate(async ({
-  //   config, state, funcs
-  // }) => {
-    
-
-
-  //   const goal = state.goal;
-  //   let position = state.position;
-
-  //   let scroller = document.querySelector();
-  //   // scroll to start position
-  //   scroller.scrollBy(0, -1 * position);
-
-  //   let scroll_distance = config.viewport_height - 20; // messages section is shorter
-
-  //   while ( !reached_channel_goal({ position, goal }) ) {
-  //     // scroll
-  //     scroller.scrollBy(0, -1 * scroll_distance);
-
-  //     // save messages elem
-
-  //     // find threads for each msg (send msg id)
-
-  //     // save threads elem with msg id
-
-  //     // save state in file
-
-  //     // prepare for next thing
-  //     position -= scroll;
-  //     // save new start?
-  //     save_state(`position`, position);
-  //   }
-
-  // }, {
-  //   page, config, state
-  // });
 };  // Ends collect_channel()
 
 
@@ -206,7 +133,7 @@ async function scroll_to_start ({ page, state, config }) {
   while ( !await reached_channel_goal({ page, position, goal }) ) {
     position = await scroll({
       page, position, goal,
-      distance: -1 * (config.viewport_height - 20)
+      distance: -1 * (config.viewport_height - 20)  // -1980
     });
   }
 };
@@ -218,12 +145,16 @@ async function scroll ({ page, position, goal, distance }) {
   // goal = 10, position = 1, distance = 20, desired = 9
   // goal = 100, position = 1, distance = 20, desired = 20
   // min( 10 - 1, 20) = 9, min( 100 - 1, 20) = 20
-  // To correct sign...?
-  // 3000 - x = 1080 - 3000
-  // Goal: 3000, distance: 2000, position:
-  // working: 2000, 1999 (1000, 1001)
-  // broken: 1, 1000, 1001, 1021, 1050 (2999, 2000, 1999, 1979, 1950)
-  console.log(`g ${Math.abs(goal)}, p ${Math.abs(position)}, diff ${Math.abs(goal) - Math.abs(position)}, d ${Math.abs(distance)}`)
+  // Convert to correct sign...?
+
+  // It's broken, though. Bug thoughts:
+  // I think the problem might be around here or around the values
+  // I pass in
+  // goal: 3000, distance: 2000, position:
+  // working desired start positions: -2000, -1971
+  // broken desired start positions: -1, -1970
+
+  console.log(`goal ${Math.abs(goal)}, pos ${Math.abs(position)}, diff ${Math.abs(goal) - Math.abs(position)}, dist ${Math.abs(distance)}`)
   let direction = Math.sign(distance);  // -1 for up, 1 for down
   distance = direction * Math.min(
     Math.abs(goal) - Math.abs(position),
@@ -234,7 +165,8 @@ async function scroll ({ page, position, goal, distance }) {
   await scroller_handle.evaluate( (elem, { distance }) => {
     elem.scrollBy(0, distance);
   }, { distance });
-  await wait_for_load({ page, seconds: .5 });
+  // Bug: It doesn't seem to matter how long this waits
+  await wait_for_load({ page, seconds: 5 });
   // Move forward
   position += distance;
   log.debug(`scrolled distance: ${distance}, position: ${ position }`);
@@ -260,11 +192,11 @@ async function get_message_container_data ({ page }) {
   let handle = await page.waitForSelector(`.c-message_list`);
   let data = await handle.evaluate((elem) => {
     let messages = document.querySelectorAll(`.c-message_list .c-virtual_list__item:has(.c-message__reply_count)`);
+    // DOM id of the messages with replies (and therefore threads)
     let reply_ids = Array.from(messages).map((item) => {return item.id});
     return {
       html: elem.outerHTML,
       reply_ids,
-      // `#${id} .c-message__reply_count`).click()
     }
   });
   return data;
@@ -272,7 +204,6 @@ async function get_message_container_data ({ page }) {
 
 async function collect_threads ({ page, ids }) {
   log.debug(`collect_threads()`);
-  // let msg_elems = document.querySelectorAll(`.c-message_list .c-virtual_list__item`);
   let threads = {};
   // Click on each thread
   for ( let id of ids ) {
@@ -285,16 +216,6 @@ async function collect_threads ({ page, ids }) {
 
 async function open_thread ({ page, id }) {
   log.debug(`open_thread() id: ${ id }`);
-  // let handle = await page.waitForSelector(`.c-message_list`);
-  // let html = await handle.evaluate((elem) => {
-  //   return elem.outerHTML;
-  // });
-  // // elem = document.getElementById(`1686681620.339679`)
-  // // messages = document.querySelectorAll(`.c-message_list .c-virtual_list__item:has(.c-message__reply_count)`);
-  // // reply_ids = Array.from(messages).map((item) => {return item.id});
-  // if ( id === `1686681620.339679` ) {
-  //   await wait_for_load({ page, seconds: 60 });
-  // }
   // Note: Can't use page.$() as querySelectorAll won't work with these
   // ids (Example id: 1668547054.805359).
   await page.evaluate((id) => {
@@ -309,12 +230,12 @@ async function collect_thread ({ page, thread_handle }) {
   log.debug(`collect_thread()`);
   let threads = [];
   let reached_end = await reached_thread_end({ thread_handle })
-  // always collect at least twice. work it out when de-duplicating.
-  let first = true;
+  // always collect at least twice. Work it out when de-duplicating.
+  let first_round = true;  // Don't really need this, but can't find good var name otherwise
   let do_final = true;
 
-  while ( first || do_final || !reached_end ) {
-    first = false;
+  while ( first_round || do_final || !reached_end ) {
+    first_round = false;
 
     let thread_contents = await get_thread_contents({ thread_handle });
     threads.push( thread_contents );
@@ -322,7 +243,8 @@ async function collect_thread ({ page, thread_handle }) {
 
     // Check if need one final round after the last scroll
     // De-duplicate later
-    reached_end = await reached_thread_end({ thread_handle });
+    // Bug: Since I've disabled scrolling, escape infinite loop
+    reached_end = true; //await reached_thread_end({ thread_handle });
     do_final = do_final && !reached_end;
   }  // ends while need to collect thread
   return threads;
@@ -330,6 +252,7 @@ async function collect_thread ({ page, thread_handle }) {
 
 async function reached_thread_end ({ thread_handle }) {
   log.debug(`reached_thread_end()`);
+  return true;
   let reached = await thread_handle.evaluate((thread) => {
     // This is from examining the DOM. Very fragile to updates.
 
@@ -349,23 +272,24 @@ async function reached_thread_end ({ thread_handle }) {
     }
     return false;
   });
-  return reached;
+  // return reached;
 }
 
 async function get_thread_contents ({ thread_handle }) {
   log.debug(`get_thread_contents()`);
   let thread_contents = await thread_handle.evaluate((elem) => {
     let html = elem.outerHTML;
-    // scroll (down this time) after getting current contents
-    let scroller = elem.querySelector(`.c-scrollbar__hider`);
-    scroller.scrollBy(0, scroller.clientHeight );
+    // // Avoid scrolling for now
+    // // scroll (down this time) after getting current contents
+    // let scroller = elem.querySelector(`.c-scrollbar__hider`);
+    // scroller.scrollBy(0, scroller.clientHeight );
     return html
   });
   return thread_contents;
 }
 
 async function wait_for_load ({ page, seconds }) {
-  /** `seconds` is ms * s * m. Wait for next part of page to load. **/
+  /** Wait, but with a clear name. **/
   log.debug(`wait_for_load()`);
   await page.waitForTimeout( 1000 * seconds );
 }
@@ -402,34 +326,4 @@ const log = {
 }
 
 
-
 start();
-
-
-/*
-- save message element html `.c-message_list`
-- save all ids in there forever to match up to threads
-containers = document.querySelectorAll('.c-message_list .c-virtual_list__item')
-ids = Array.from(containers).map((item) => {return item.id})
-- ~~save "visible" ids~~
-- detect "reply" element
-- for each "reply":
-    - save id of source post
-    - click
-    - wait
-    - collect (don't save id list)
-- ~~until all known ids are gone~~
-- Scroll for ` (-1 * window.innerHeight) + 50 ` (it's a bit taller than the viewport)
-```
-scroller = document.querySelector('.c-message_list .c-scrollbar__hider')
-scroller.scrollBy(0, -100)
-```
-- ~~scroll up by 25 (less than half shortest item?)? Scroll above last element and then up by 25 at a time?~~
-    - increment scroll counter in config file
-    - wait a while (1 second? that will take a lot of seconds. .25?)
-    - ~~check id list~~
-- ~~until all previous ids are gone~~
-- repeat
-- infinite scroll: reach top (how do we know? scroll 100 times and no new ids?)
-- limited scroll: if >= top, stop
-*/
