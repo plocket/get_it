@@ -69,6 +69,10 @@ async function collect_channel({
   let position = state.position;
   // Goal: position + how much farther to go
   let goal = position + config.travel_distance;
+  // In case travel_distance is `end` or something (to inifitely scroll to the top)
+  if ( typeof config.travel_distance === `string` ) {
+    goal = config.travel_distance;
+  }
 
   // These must be outside the `while` scope
   // Collect at least one round of messages, even at top
@@ -127,20 +131,12 @@ async function scroll_to_start ({ page, state, config }) {
 async function scroll ({ page, position, goal, distance }) {
   /** Returns new position int. `distance` is negative. */
   log.debug(`scroll():`);
+  log.debug(`goal ${Math.abs(goal)}, pos ${Math.abs(position)}, diff ${Math.abs(goal) - Math.abs(position)}, dist ${Math.abs(distance)}`)
   // Don't overshoot. Math justification:
   // goal = 10, position = 1, distance = 20, desired = 9
   // goal = 100, position = 1, distance = 20, desired = 20
   // min( 10 - 1, 20) = 9, min( 100 - 1, 20) = 20
   // Convert to correct sign...?
-
-  // It's broken, though. Bug thoughts:
-  // I think the problem might be around here or around the values
-  // I pass in
-  // goal: 3000, distance: 2000, position:
-  // working desired start positions: -2000, -1971
-  // broken desired start positions: -1, -1970
-
-  console.log(`goal ${Math.abs(goal)}, pos ${Math.abs(position)}, diff ${Math.abs(goal) - Math.abs(position)}, dist ${Math.abs(distance)}`)
   let direction = Math.sign(distance);  // -1 for up, 1 for down
   distance = direction * Math.min(
     Math.abs(goal) - Math.abs(position),
@@ -154,22 +150,26 @@ async function scroll ({ page, position, goal, distance }) {
   await wait_for_movement({ page, seconds: .5 });
   // Move forward
   position += distance;
-  log.debug(`scrolled distance: ${distance}, position: ${ position }`);
+  log.debug(`scrolled: distance ${ distance }, position ${ position }`);
   return position;
 }
 
 async function reached_channel_goal ({ page, position, goal }) {
   log.debug(`reached_channel_goal()`);
-  let reached = false;
+  let reached_end = false;
   let top = await page.$(`h1.p-message_pane__foreword__title`);
   if ( top ) {
     log.debug(`--- at top ---`);
-    reached = true;
-  } else if ( goal !== `end` ) {
-    reached = Math.abs(position) >= Math.abs(goal);
+    reached_end = true;
+  } else if ( [ `end`, `top`, `infinite` ].includes( goal ) ) {
+    // Those strings means the dev wants to get all the way to the top.
+    // Return false since we're not at the top.
+    reached_end = false;
+  } else {
+    reached_end = Math.abs(position) >= Math.abs(goal);
   }
-  log.debug(`reached_channel_goal(): position: ${ position }, goal: ${ goal }, reached: ${reached}`);
-  return reached;
+  log.debug(`reached_channel_goal(): position: ${ position }, goal: ${ goal }, reached_end: ${reached_end}`);
+  return reached_end;
 }
 
 async function get_message_container_data ({ page }) {
