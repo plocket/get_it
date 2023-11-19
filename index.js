@@ -67,8 +67,8 @@ async function collect_channel({
   await scroll_to_start({ page, state, config });
 
   let position = state.position;
-  // both negative makes math work. -1000 - -100 = -900
-  let goal = config.goal_distance - position;
+  // Goal: position + how much farther to go
+  let goal = position + config.travel_distance;
 
   // These must be outside the `while` scope
   // Collect at least one round of messages, even at top
