@@ -12,7 +12,7 @@ an element that was just found on the page no longer appears to
 be on the page.
 
 It only happens when the desired start position for scraping is
-above -1970. I think that's just chance - more to do with what's
+at or below -1970. I think that's just chance - more to do with what's
 on the Slack channel currently. Maybe it's broken no matter what,
 though, and the channel would break somewhere above -1971 starting
 position too.
