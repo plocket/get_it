@@ -4,8 +4,6 @@ require(`dotenv`).config();
 
 let config = JSON.parse(fs.readFileSync(`./config.json`));
 let state = JSON.parse(fs.readFileSync(`./${ config.state_path }`));
-// state.position: -1999 works
-// state.position: -1 breaks
 
 async function start() {
   log.debug(`start()`);
@@ -20,8 +18,6 @@ async function start() {
   // Make very big viewport?
   await page.setViewport({ height: config.viewport_height, width: 1000 });
   await log_in({ page });
-  await wait_for_load({ page, seconds: 20 });
-
   await go_to_channel({ page, channel_name: state.current_channel });
   await collect_channel({ page, config, state });
 
@@ -45,11 +41,12 @@ async function log_in({ page }) {
 async function auth({ page }) {
   await page.type(`input#email`, process.env.EMAIL);
   await page.type(`input#password`, process.env.PASSWORD);
-  // Go to workspace
+  // Submit and go to workspace
   let [auth_reponse] = await Promise.all([
     page.waitForNavigation({ waitUntil: `domcontentloaded` }),
     page.click(`button[type="submit"]`),
   ]);
+  await wait_for_load({ page, seconds: 20 });
   return auth_reponse;
 }
 
@@ -67,8 +64,6 @@ async function collect_channel({
   * page {obj} - puppeteer page
   */
   log.debug(`collect_channel()`);
-
-  // Bug: this might be causing the problem, though I don't know how
   await scroll_to_start({ page, state, config });
 
   let position = state.position;
@@ -76,25 +71,17 @@ async function collect_channel({
   let goal = config.goal_distance - position;
 
   // These must be outside the `while` scope
+  // Collect at least one round of messages, even at top
   let reached_goal = await reached_channel_goal({ page, position, goal });
-  // Collect at least two rounds of messages
-  let first_round = true;
-  let do_final = true;
+  let final_round_done = false;
 
-  while ( first_round || do_final || !reached_goal ) {
-    // Will have collected at least once for this channel
-    // From now on, use position and goal to determine completion
-    first_round = false;
-
+  while ( !final_round_done || !reached_goal ) {
     // Collect currently existing elements
     let messages = await get_message_container_data({ page });
     log.debug(`msgs html: `, messages.html[0]);
     log.debug(`reply_ids:`, messages.reply_ids);
 
-    // Get thread data for current elements
-    
-    // Bug: An element with a reply id no longer exists when we go
-    // to collect one of the threads.
+    // Get thread data for current elements in the thread
     let threads = await collect_threads({
       page,
       ids: messages.reply_ids,
@@ -114,10 +101,9 @@ async function collect_channel({
       distance: -1 * (config.viewport_height - 20)  // -1980
     });
 
-    // Check if need one do_final round after the last scroll
-    // If it's a duplicate, that's fine for our purposes
+    // Check if need final round after the last scroll
     reached_goal = await reached_channel_goal({ page, position, goal });
-    do_final = !do_final && reached_goal;
+    final_round_done = final_round_done || reached_goal;
 
     // save new start for next run of script
     save_state(`position`, position);
@@ -161,12 +147,11 @@ async function scroll ({ page, position, goal, distance }) {
     Math.abs(distance)
   )
   // Scroll
-  let scroller_handle = await page.waitForSelector(`.c-message_list .c-scrollbar__hider`);
+  let scroller_handle = await page.waitForSelector(`.p-workspace__primary_view_body .c-scrollbar__hider`);
   await scroller_handle.evaluate( (elem, { distance }) => {
     elem.scrollBy(0, distance);
   }, { distance });
-  // Bug: It doesn't seem to matter how long this waits
-  await wait_for_load({ page, seconds: 5 });
+  await wait_for_movement({ page, seconds: .5 });
   // Move forward
   position += distance;
   log.debug(`scrolled distance: ${distance}, position: ${ position }`);
@@ -189,9 +174,9 @@ async function reached_channel_goal ({ page, position, goal }) {
 
 async function get_message_container_data ({ page }) {
   log.debug(`get_message_container_data()`);
-  let handle = await page.waitForSelector(`.c-message_list`);
+  let handle = await page.waitForSelector(`.p-workspace__primary_view_body`);
   let data = await handle.evaluate((elem) => {
-    let messages = document.querySelectorAll(`.c-message_list .c-virtual_list__item:has(.c-message__reply_count)`);
+    let messages = document.querySelectorAll(`.p-workspace__primary_view_body .c-virtual_list__item:has(.c-message__reply_count)`);
     // DOM id of the messages with replies (and therefore threads)
     let reply_ids = Array.from(messages).map((item) => {return item.id});
     return {
@@ -209,6 +194,7 @@ async function collect_threads ({ page, ids }) {
   for ( let id of ids ) {
     let thread_handle = await open_thread({ page, id });
     let data = await collect_thread({ page, thread_handle });
+    await close_thread({ page, thread_handle });
     threads[id] = data;
   }
   return threads;
@@ -216,13 +202,13 @@ async function collect_threads ({ page, ids }) {
 
 async function open_thread ({ page, id }) {
   log.debug(`open_thread() id: ${ id }`);
-  // Note: Can't use page.$() as querySelectorAll won't work with these
+  // Note: page.$() as querySelectorAll won't work with these
   // ids (Example id: 1668547054.805359).
   await page.evaluate((id) => {
     let elem = document.getElementById(id);
     elem.querySelector('.c-message__reply_count').click();
   }, id);
-  await wait_for_load({ page, seconds: 1 });
+  await wait_for_movement({ page, seconds: 1 });
   return await page.waitForSelector(`div[data-qa="threads_flexpane"]`);
 }
 
@@ -230,23 +216,17 @@ async function collect_thread ({ page, thread_handle }) {
   log.debug(`collect_thread()`);
   let threads = [];
   let reached_end = await reached_thread_end({ thread_handle })
-  // always collect at least twice. Work it out when de-duplicating.
-  let first_round = true;  // Don't really need this, but can't find good var name otherwise
-  let do_final = true;
+  // Always collect at least once (some threads are at the
+  // bottom from the start).
+  let final_round_done = true;
 
-  while ( first_round || do_final || !reached_end ) {
-    first_round = false;
-
-    let thread_contents = await get_thread_contents({ thread_handle });
+  while ( final_round_done || !reached_end ) {
+    let thread_contents = await get_thread_contents_and_scroll({ page, thread_handle });
     threads.push( thread_contents );
-    await wait_for_load({ page, seconds: .2 });
-
     // Check if need one final round after the last scroll
-    // De-duplicate later
-    // Bug: Since I've disabled scrolling, escape infinite loop
-    reached_end = true; //await reached_thread_end({ thread_handle });
-    do_final = do_final && !reached_end;
-  }  // ends while need to collect thread
+    reached_end = await reached_thread_end({ thread_handle });
+    final_round_done = final_round_done && !reached_end;
+  }
   return threads;
 }
 
@@ -257,7 +237,7 @@ async function reached_thread_end ({ thread_handle }) {
     // This is from examining the DOM. Very fragile to updates.
 
     // Get "reply" input top. The last thread element + some math
-    // will be able to match that number
+    // will be able to match input_top
     let input = thread.querySelector(`div[data-item-key="input"]`);
     let input_top = parseInt(window.getComputedStyle(input).getPropertyValue('top').replace('px', ''));
     
@@ -275,21 +255,36 @@ async function reached_thread_end ({ thread_handle }) {
   // return reached;
 }
 
-async function get_thread_contents ({ thread_handle }) {
-  log.debug(`get_thread_contents()`);
+async function get_thread_contents_and_scroll ({ page, thread_handle }) {
+  log.debug(`get_thread_contents_and_scroll()`);
   let thread_contents = await thread_handle.evaluate((elem) => {
     let html = elem.outerHTML;
-    // // Avoid scrolling for now
-    // // scroll (down this time) after getting current contents
-    // let scroller = elem.querySelector(`.c-scrollbar__hider`);
-    // scroller.scrollBy(0, scroller.clientHeight );
+    // scroll (down this time) after getting current contents
+    let scroller = elem.querySelector(`.c-scrollbar__hider`);
+    scroller.scrollBy(0, scroller.clientHeight );
     return html
   });
+  await wait_for_movement({ page, seconds: 1 });
   return thread_contents;
 }
 
+async function close_thread ({ page, thread_handle }) {
+  /** The width of the viewport is affected by opening a thread,
+  *   scrolling the messages. Undo that. */
+  await thread_handle.evaluate((elem) => {
+    elem.querySelector('button[data-qa="close_flexpane"]').click();
+  });
+  await wait_for_movement({ page, seconds: 1 });
+}
+
+async function wait_for_movement ({ page, seconds }) {
+  /** Wait, but with a clearer name. **/
+  log.debug(`wait_for_movement()`);
+  await wait_for_load({ page, seconds });
+}
+
 async function wait_for_load ({ page, seconds }) {
-  /** Wait, but with a clear name. **/
+  /** Wait, but with a clearer name. **/
   log.debug(`wait_for_load()`);
   await page.waitForTimeout( 1000 * seconds );
 }
