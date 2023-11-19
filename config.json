@@ -4,5 +4,5 @@
   "messages_path": "messages.json",
   "threads_path": "threads.json",
   "viewport_height": 2000,
-  "goal_distance": -60000
+  "goal_distance": -3000
 }
