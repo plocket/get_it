@@ -4,8 +4,6 @@ require(`dotenv`).config();
 
 let config = JSON.parse(fs.readFileSync(`./config.json`));
 let state = JSON.parse(fs.readFileSync(`./${ config.state_path }`));
-// state.position: -1999 works
-// state.position: -1 breaks
 
 async function start() {
   log.debug(`start()`);
@@ -67,8 +65,6 @@ async function collect_channel({
   * page {obj} - puppeteer page
   */
   log.debug(`collect_channel()`);
-
-  // Bug: this might be causing the problem, though I don't know how
   await scroll_to_start({ page, state, config });
 
   let position = state.position;
@@ -91,10 +87,7 @@ async function collect_channel({
     log.debug(`msgs html: `, messages.html[0]);
     log.debug(`reply_ids:`, messages.reply_ids);
 
-    // Get thread data for current elements
-    
-    // Bug: An element with a reply id no longer exists when we go
-    // to collect one of the threads.
+    // Get thread data for current elements in the thread
     let threads = await collect_threads({
       page,
       ids: messages.reply_ids,
@@ -161,11 +154,10 @@ async function scroll ({ page, position, goal, distance }) {
     Math.abs(distance)
   )
   // Scroll
-  let scroller_handle = await page.waitForSelector(`.c-message_list .c-scrollbar__hider`);
+  let scroller_handle = await page.waitForSelector(`.p-workspace__primary_view_body .c-scrollbar__hider`);
   await scroller_handle.evaluate( (elem, { distance }) => {
     elem.scrollBy(0, distance);
   }, { distance });
-  // Bug: It doesn't seem to matter how long this waits
   await wait_for_load({ page, seconds: .5 });
   // Move forward
   position += distance;
@@ -189,9 +181,9 @@ async function reached_channel_goal ({ page, position, goal }) {
 
 async function get_message_container_data ({ page }) {
   log.debug(`get_message_container_data()`);
-  let handle = await page.waitForSelector(`.c-message_list`);
+  let handle = await page.waitForSelector(`.p-workspace__primary_view_body`);
   let data = await handle.evaluate((elem) => {
-    let messages = document.querySelectorAll(`.c-message_list .c-virtual_list__item:has(.c-message__reply_count)`);
+    let messages = document.querySelectorAll(`.p-workspace__primary_view_body .c-virtual_list__item:has(.c-message__reply_count)`);
     // DOM id of the messages with replies (and therefore threads)
     let reply_ids = Array.from(messages).map((item) => {return item.id});
     return {
@@ -232,20 +224,18 @@ async function collect_thread ({ page, thread_handle }) {
   let threads = [];
   let reached_end = await reached_thread_end({ thread_handle })
   // always collect at least twice. Work it out when de-duplicating.
-  let first_round = true;  // Don't really need this, but can't find good var name otherwise
+  let first_round = true;  // Unneeded, but can't find good var name otherwise
   let do_final = true;
 
   while ( first_round || do_final || !reached_end ) {
     first_round = false;
 
-    let thread_contents = await get_thread_contents({ thread_handle });
+    let thread_contents = await get_thread_contents({ page, thread_handle });
     threads.push( thread_contents );
-    await wait_for_load({ page, seconds: .2 });
 
     // Check if need one final round after the last scroll
     // De-duplicate later
-    // Bug: Since I've disabled scrolling, escape infinite loop
-    reached_end = true; //await reached_thread_end({ thread_handle });
+    reached_end = await reached_thread_end({ thread_handle });
     do_final = do_final && !reached_end;
   }  // ends while need to collect thread
   return threads;
@@ -276,16 +266,16 @@ async function reached_thread_end ({ thread_handle }) {
   // return reached;
 }
 
-async function get_thread_contents ({ thread_handle }) {
+async function get_thread_contents ({ page, thread_handle }) {
   log.debug(`get_thread_contents()`);
   let thread_contents = await thread_handle.evaluate((elem) => {
     let html = elem.outerHTML;
-    // // Avoid scrolling for now
-    // // scroll (down this time) after getting current contents
-    // let scroller = elem.querySelector(`.c-scrollbar__hider`);
-    // scroller.scrollBy(0, scroller.clientHeight );
+    // scroll (down this time) after getting current contents
+    let scroller = elem.querySelector(`.c-scrollbar__hider`);
+    scroller.scrollBy(0, scroller.clientHeight );
     return html
   });
+  await wait_for_load({ page, seconds: 1 });
   return thread_contents;
 }
 
