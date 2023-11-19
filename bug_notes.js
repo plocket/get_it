@@ -1,13 +1,21 @@
 /*
-It seems like it would have to be something to do with
-scrolling - an element that was just found on the page
-no longer appears to be on the page.
+My code is supposed to scrape Slack in the browser. Slack has
+infinite scroll. The code is supposed to scroll up through
+Slack messages, stopping to open threads and scrape them too.
+I start at the bottom and go up. When I scrape, I have to get
+to the starting position I previously stopped at. I have to do
+that gradually because of the way Slack behaves.
 
-That only happens when the desired start position is above -1970.
-I think that's chance - more to do with what's on the Slack
-channel currently. Maybe this is broken no matter what, though,
-and the channel would break somewhere above -2000 starting position
-too.
+When doing this, I have a bug and I can't find its source. It
+seems to me like it must have something to do with scrolling -
+an element that was just found on the page no longer appears to
+be on the page.
+
+It only happens when the desired start position for scraping is
+above -1970. I think that's just chance - more to do with what's
+on the Slack channel currently. Maybe it's broken no matter what,
+though, and the channel would break somewhere above -1971 starting
+position too.
 
 The code parts I believe are relevant are below, though you can
 look at the full script at index.js. The console output for
