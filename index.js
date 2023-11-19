@@ -166,7 +166,7 @@ async function scroll ({ page, position, goal, distance }) {
     elem.scrollBy(0, distance);
   }, { distance });
   // Bug: It doesn't seem to matter how long this waits
-  await wait_for_load({ page, seconds: 5 });
+  await wait_for_load({ page, seconds: .5 });
   // Move forward
   position += distance;
   log.debug(`scrolled distance: ${distance}, position: ${ position }`);
@@ -209,6 +209,7 @@ async function collect_threads ({ page, ids }) {
   for ( let id of ids ) {
     let thread_handle = await open_thread({ page, id });
     let data = await collect_thread({ page, thread_handle });
+    await close_thread({ page, thread_handle });
     threads[id] = data;
   }
   return threads;
@@ -286,6 +287,15 @@ async function get_thread_contents ({ thread_handle }) {
     return html
   });
   return thread_contents;
+}
+
+async function close_thread ({ page, thread_handle }) {
+  /** The width of the viewport is affected by opening a thread,
+  *   scrolling the messages. Undo that */
+  await thread_handle.evaluate((elem) => {
+    elem.querySelector('button[data-qa="close_flexpane"]').click();
+  });
+  await wait_for_load({ page, seconds: 1 });
 }
 
 async function wait_for_load ({ page, seconds }) {
