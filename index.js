@@ -18,6 +18,8 @@ async function start() {
   // Make very big viewport?
   await page.setViewport({ height: config.viewport_height, width: 1000 });
   await log_in({ page });
+  // TODO: Create folder for channel if it doesn't exist
+  // TODO: loop through channels
   await go_to_channel({ page, channel_name: state.current_channel });
   await collect_channel({ page, config, state });
 
@@ -67,7 +69,6 @@ async function collect_channel({
   await scroll_to_start({ page, state, config });
 
   let position = state.position;
-  // Goal: position + how much farther to go
   let goal = position + config.travel_distance;
   // In case travel_distance is `end` or something (to inifitely scroll to the top)
   if ( typeof config.travel_distance === `string` ) {
@@ -91,12 +92,13 @@ async function collect_channel({
       ids: messages.reply_ids,
     });
 
-    // // save messages and threads data as we go since
-    // // we may not be able to collect a whole channel at once
-    // save_data({
-    //   config, state,
-    //   data: { messages: messages.html, threads }
-    // });
+    // save one screen of messages and threads data as we go since
+    // we may not be able to collect a whole channel at once
+    // because of errors or computers going to sleep
+    save_data({
+      config, state,
+      data: { messages: messages.html, threads }
+    });
 
     // prepare for next loop
     // scroll to new position
@@ -293,23 +295,84 @@ function save_data ({ config, state, data }) {
   /** `data` {obj} - .messages and .threads */
   log.debug(`save_data()`);
 
-  // message groups html list path
-  let messages_path = `data/${state.current_channel}/${config.messages_path}`;
-  let messages = JSON.parse(fs.readFileSync(messages_path));
-  messages.unshift(data.messages);
-  log.debug(`save msgs:`, messages[0][0]);
-  fs.writeFileSync(messages_path, JSON.stringify(messages));
+  let folder_path = `data/${state.current_channel}`;
+  ensure_dir_exists({ dir_path: folder_path })
 
-  // threads' strings by id object path
-  let threads_path = `data/${state.current_channel}/${config.threads_path}`;
-  let threads = JSON.parse(fs.readFileSync(threads_path));
+  // List of message groups html
+  let msgs_file_path = `${folder_path}/${config.messages_path}`;
+  ensure_file_exists({ file_path: msgs_file_path, default_contents: `[]` });
+  console.log(`------\n\n`, fs.readFileSync(msgs_file_path), `\n\n-----`);
+  let messages = JSON.parse(fs.readFileSync(msgs_file_path)) || [];
+  messages.unshift(data.messages);
+  // log.debug(`save msgs:`, messages[0][0]);
+  fs.writeFileSync(msgs_file_path, JSON.stringify(messages));
+
+  // Object of threads' html by id
+  let threads_file_path = `${folder_path}/${config.threads_path}`;
+  ensure_file_exists({ file_path: threads_file_path, default_contents: `{}` });
+  let threads = JSON.parse(fs.readFileSync(threads_file_path)) || {};
   threads = { ...threads, ...data.threads };
-  log.debug( threads );
-  fs.writeFileSync(threads_path, JSON.stringify(threads));
+  // log.debug( threads );
+  fs.writeFileSync(threads_file_path, JSON.stringify(threads));
+}
+
+function ensure_dir_exists ({ dir_path }) {
+  log.debug(`ensure_dir_exists()`);
+  try {
+    can_access_path_correctly({ path: dir_path });
+  } catch ( error ) {
+
+    if ( error.code === `ENOENT` ) {
+      log.debug(`Creating ${ dir_path }`);
+      fs.mkdirSync( dir_path, { recursive: true });
+      log.debug(`Created ${ dir_path }`);
+    } else {
+       throw( error )
+    }
+
+  }  // ends try
+}
+
+function ensure_file_exists ({ file_path, default_contents }) {
+  log.debug(`ensure_file_exists()`);
+  try {
+    can_access_path_correctly({ path: file_path });
+  } catch ( error ) {
+
+    if ( error.code === `ENOENT` ) {
+      log.debug(`Creating ${ file_path }`);
+      fs.writeFileSync(file_path, default_contents);
+      log.debug(`Created ${ file_path }`);
+    } else {
+       throw( error )
+    }
+
+  }  // ends try
+}
+
+function can_access_path_correctly ({ path }) {
+  try {
+
+    log.debug(`can_access_path_correctly()`);
+    fs.accessSync( path );
+    log.debug(`The ${ path } path exists`);
+    fs.accessSync( path, fs.constants.W_OK );
+    log.debug(`You can write to ${ path }`);
+
+  } catch ( error ) {
+
+    if ( error.code === `ENOENT` ) {
+      log.debug(`${ path } is missing`);
+    } else if ( error.code === `EACCES` ) {
+      log.debug(`You have no write permissions for ${ path }`);
+    }
+    throw( error );
+
+  }  // ends try
 }
 
 function save_state (key, value) {
-  log.debug(`save_state() key: ${key}`);
+  log.debug(`save_state(): key "${ key }", value: ${ value }`);
 }
 
 const log = {
