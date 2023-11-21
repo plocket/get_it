@@ -2,6 +2,9 @@ const puppeteer = require(`puppeteer`);
 const fs = require(`fs`);
 require(`dotenv`).config();
 
+// TODO: Make `page` global?
+
+// TODO: config is really args?
 let config = JSON.parse(fs.readFileSync(`./config.json`));
 let state = JSON.parse(fs.readFileSync(`./${ config.state_path }`));
 
@@ -80,7 +83,7 @@ async function collect_channel({
   let reached_goal = await reached_channel_goal({ page, position, goal });
   let final_round_done = false;
 
-  while ( !final_round_done || !reached_goal ) {
+  while ( !final_round_done ) {
     // Collect currently existing elements
     let messages = await get_message_container_data({ page });
     log.debug(`msgs html: `, messages.html[0]);
@@ -123,29 +126,23 @@ async function scroll_to_start ({ page, state, config }) {
   let position = 0;
   let goal = state.position;
   while ( !await reached_channel_goal({ page, position, goal }) ) {
+    let distance = calculate_scroll_distance({
+      position, goal,
+      max_distance: -1 * (config.viewport_height - 20)  // TODO: Change to actual height, remove config
+    });
+    // TODO: scroller_selector
     position = await scroll({
-      page, position, goal,
-      distance: -1 * (config.viewport_height - 20)  // -1980
+      page, position, distance,
+      scroller_selector: `.p-workspace__primary_view_body .c-scrollbar__hider`
     });
   }
 };
 
-async function scroll ({ page, position, goal, distance }) {
-  /** Returns new position int. `distance` is negative. */
-  log.debug(`scroll():`);
-  log.debug(`goal ${Math.abs(goal)}, pos ${Math.abs(position)}, diff ${Math.abs(goal) - Math.abs(position)}, dist ${Math.abs(distance)}`)
-  // Don't overshoot. Math justification:
-  // goal = 10, position = 1, distance = 20, desired = 9
-  // goal = 100, position = 1, distance = 20, desired = 20
-  // min( 10 - 1, 20) = 9, min( 100 - 1, 20) = 20
-  // Convert to correct sign...?
-  let direction = Math.sign(distance);  // -1 for up, 1 for down
-  distance = direction * Math.min(
-    Math.abs(goal) - Math.abs(position),
-    Math.abs(distance)
-  )
-  // Scroll
-  let scroller_handle = await page.waitForSelector(`.p-workspace__primary_view_body .c-scrollbar__hider`);
+async function scroll ({ page, position, distance, scroller_selector }) {
+  /** Returns new position int */
+  log.debug(`scroll()`);
+  scroller_selector = scroller_selector || `.p-workspace__primary_view_body .c-scrollbar__hider`;
+  scroller_handle = await page.waitForSelector(scroller_selector);
   await scroller_handle.evaluate( (elem, { distance }) => {
     elem.scrollBy(0, distance);
   }, { distance });
@@ -156,6 +153,23 @@ async function scroll ({ page, position, goal, distance }) {
   return position;
 }
 
+function calculate_scroll_distance({ position, goal, max_distance }) {
+  log.debug(`calculate_scroll_distance() absolutes: goal ${Math.abs(goal)}, pos ${Math.abs(position)}, diff ${Math.abs(goal) - Math.abs(position)}, dist ${Math.abs(distance)}`);
+  // Don't overshoot. Math justification:
+  // goal = 10, position = 1, distance = 20, desired = 9
+  // goal = 100, position = 1, distance = 20, desired = 20
+  // min( 10 - 1, 20) = 9, min( 100 - 1, 20) = 20
+  // Convert to correct sign...?
+  let direction = Math.sign(max_distance);  // -1 for up, 1 for down
+  let distance_to_goal = Math.abs(goal) - Math.abs(position);
+  let max_distance_to_travel = Math.abs(max_distance);
+  let actual_distance = direction * Math.min(
+        distance_to_goal, max_distance_to_travel
+  );
+  log.debug(`actual distance ${ actual_distance }`);
+  return actual_distance;
+}
+
 async function reached_channel_goal ({ page, position, goal }) {
   log.debug(`reached_channel_goal()`);
   let reached_end = false;
@@ -163,7 +177,7 @@ async function reached_channel_goal ({ page, position, goal }) {
   if ( top ) {
     log.debug(`--- at top ---`);
     reached_end = true;
-  } else if ( [ `end`, `top`, `infinite` ].includes( goal ) ) {
+  } else if ( [ `end`, `top`, `infinite`, `all` ].includes( goal ) ) {
     // Those strings means the dev wants to get all the way to the top.
     // Return false since we're not at the top.
     reached_end = false;
@@ -210,31 +224,31 @@ async function open_thread ({ page, id }) {
     let elem = document.getElementById(id);
     elem.querySelector('.c-message__reply_count').click();
   }, id);
-  await wait_for_movement({ page, seconds: 1 });
+  await wait_for_movement({ page, seconds: 2 });
   return await page.waitForSelector(`div[data-qa="threads_flexpane"]`);
 }
 
 async function collect_thread ({ page, thread_handle }) {
   log.debug(`collect_thread()`);
-  let threads = [];
+  let thread_items = [];
   let reached_end = await reached_thread_end({ thread_handle })
   // Always collect at least once (some threads are at the
   // bottom from the start).
-  let final_round_done = true;
+  let final_round_done = false;
 
-  while ( final_round_done || !reached_end ) {
+  while ( !final_round_done ) {
     let thread_contents = await get_thread_contents_and_scroll({ page, thread_handle });
-    threads.push( thread_contents );
+    thread_items.push( thread_contents );
     // Check if need one final round after the last scroll
     reached_end = await reached_thread_end({ thread_handle });
-    final_round_done = final_round_done && !reached_end;
+    final_round_done = final_round_done || reached_end;
   }
-  return threads;
+  return thread_items;
 }
 
+// BUG: THREADS ALSO START AT THE BOTTOM
 async function reached_thread_end ({ thread_handle }) {
   log.debug(`reached_thread_end()`);
-  return true;
   let reached = await thread_handle.evaluate((thread) => {
     // This is from examining the DOM. Very fragile to updates.
 
@@ -254,13 +268,13 @@ async function reached_thread_end ({ thread_handle }) {
     }
     return false;
   });
-  // return reached;
+  return reached;
 }
 
 async function get_thread_contents_and_scroll ({ page, thread_handle }) {
   log.debug(`get_thread_contents_and_scroll()`);
   let thread_contents = await thread_handle.evaluate((elem) => {
-    let html = elem.outerHTML;
+    let html = `` + elem.outerHTML;
     // scroll (down this time) after getting current contents
     let scroller = elem.querySelector(`.c-scrollbar__hider`);
     scroller.scrollBy(0, scroller.clientHeight );

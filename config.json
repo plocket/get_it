@@ -4,5 +4,5 @@
   "messages_path": "messages.json",
   "threads_path": "threads.json",
   "viewport_height": 500,
-  "travel_distance": -3000
+  "travel_distance": -2000
 }
