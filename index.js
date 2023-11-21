@@ -2,11 +2,53 @@ const puppeteer = require(`puppeteer`);
 const fs = require(`fs`);
 require(`dotenv`).config();
 
-// TODO: Make `page` global?
+// TODO: scroll to find channel
+
+/*
+TODO: download files
+In messages (in a message, even?):
+
+Get all action buttons in message:
+  in message node
+    Reveal unexpanded
+      <button class="c-button-unstyled c-icon_button c-icon_button--size_medium c-message_kit__file__meta__collapse c-icon_button--default" aria-label="Toggle file" aria-expanded="false" data-qa="file-collapse-button" type="button"><svg data-9gn="true" aria-hidden="true" viewBox="0 0 20 20" class=""><path fill="currentColor" d="M13.22 9.423a.75.75 0 0 1 .001 1.151l-4.49 3.755a.75.75 0 0 1-1.231-.575V6.25a.75.75 0 0 1 1.23-.575l4.49 3.747Z"></path></svg></button>
+    Get thread link
+    jpg
+      document.querySelectorAll(`.c-file__actions`) or
+      data-qa="more_file_actions" .click() or
+      aria-label="different_kind_of_tags_maybe.png: More actions"
+    video
+      aria-label="More actions"
+    pdf
+      aria-label="209a_258e_motion_for_impoundment.pdf: More actions"
+Get the action to open in thread:
+  jpg
+    button[data-qa="view_file_details"] or
+    <button class="c-button-unstyled c-menu_item__button" id="menu-192-1" data-qa="view_file_details" role="menuitem" tabindex="-1" type="button"><div class="c-menu_item__label">View file details</div></button>
+  video
+    <button class="c-button-unstyled c-menu_item__button" id="menu-165-2" data-qa="menu_item_button" role="menuitem" tabindex="-1" type="button"><div class="c-menu_item__label">View details</div></button>
+Press download? How to download
+  `*[data-qa="download_action"]`
+    link href="https://files.slack.com/files-pri/T024F66L9-F02UT2JEM9V/download/file_from_ios.mp4?origin_team=T024F66L9"
+    opens new window sometimes (always?). What to do about that?
+    Maybe this:
+    // Get the file content
+    const fileContent = await page.evaluate(() => {
+      return fetch(url, {
+        method: 'GET',
+        credentials: 'include'
+      }).then(r => r.text());
+    });
+    // Write the file content to the local file system
+    fs.writeFileSync(outputFilename, fileContent);
+*/
 
 // TODO: config is really args?
 let config = JSON.parse(fs.readFileSync(`./config.json`));
 let state = JSON.parse(fs.readFileSync(`./${ config.state_path }`));
+let page = null;
+
+const CHANNEL_SCROLLER_SELECTOR = `.p-workspace__primary_view_body .c-scrollbar__hider`;
 
 async function start() {
   log.debug(`start()`);
@@ -16,20 +58,27 @@ async function start() {
     headless: !process.env.DEBUG,
     devtools: process.env.DEBUG,
   });
-  const page = await browser.newPage();
+  page = await browser.newPage();
+
+  // // Prepare for future downloading
+  // await page._client.send(`Page.setDownloadBehavior`, {
+  //   behavior: `allow`,
+  //   downloadPath: `./data/${ state.current_channel }/downloads`,
+  // });
 
   // Make very big viewport?
   await page.setViewport({ height: config.viewport_height, width: 1000 });
-  await log_in({ page });
+  await log_in();
   // TODO: Create folder for channel if it doesn't exist
   // TODO: loop through channels
-  await go_to_channel({ page, channel_name: state.current_channel });
-  await collect_channel({ page, config, state });
+  await go_to_channel({ channel_name: state.current_channel });
+  await collect_channel({ config, state });
+  process.stdout.write(`\x1b[36m${ '@' }\x1b[0m`);
 
   browser.close();
 };
 
-async function log_in({ page }) {
+async function log_in() {
   log.debug(`log_in()`);
   await page.goto(process.env.WORKSPACE, { waitUntil: `domcontentloaded` });
   // Choose to log in by email
@@ -38,12 +87,12 @@ async function log_in({ page }) {
     page.click(`input[type="submit"]`),
   ]);
   // Log in
-  let response = await auth({ page });
-  await wait_for_load({ page, seconds: .5 });
+  let response = await auth();
+  await wait_for_load({ seconds: .5 });
   return page;
 };  // Ends log_in()
 
-async function auth({ page }) {
+async function auth() {
   await page.type(`input#email`, process.env.EMAIL);
   await page.type(`input#password`, process.env.PASSWORD);
   // Submit and go to workspace
@@ -51,150 +100,151 @@ async function auth({ page }) {
     page.waitForNavigation({ waitUntil: `domcontentloaded` }),
     page.click(`button[type="submit"]`),
   ]);
-  await wait_for_load({ page, seconds: 20 });
+  await wait_for_load({ seconds: 20 });
   return auth_reponse;
 }
 
-async function go_to_channel({ page, channel_name }) {
+async function go_to_channel({ channel_name }) {
   /** Click on channel link */
   log.debug(`go_to_channel()`);
   await page.click(`span[data-qa="channel_sidebar_name_${ channel_name }"]`);
 };
 
-async function collect_channel({
-  page, config, state
-}) {
-  /** Collect all data from the start to the the scroll distance.
-  *
-  * page {obj} - puppeteer page
-  */
+async function collect_channel({ config, state }) {
+  /** Collect all data from the start to the the scroll distance */
   log.debug(`collect_channel()`);
-  await scroll_to_start({ page, state, config });
 
   let position = state.position;
-  let goal = position + config.travel_distance;
-  // In case travel_distance is `end` or something (to inifitely scroll to the top)
-  if ( typeof config.travel_distance === `string` ) {
-    goal = config.travel_distance;
-  }
+  const goal_position = get_channel_goal ({
+    position,
+    // `config.max_travel_pixels`? `config.max_travel/distance_wanted`?
+    max_distance_wanted: config.travel_distance,
+  })
+  await scroll_to_start({ state, config });
+  // Are we already finished?
+  let reached_goal = await reached_channel_goal({ position, goal_position });
 
-  // These must be outside the `while` scope
-  // Collect at least one round of messages, even at top
-  let reached_goal = await reached_channel_goal({ page, position, goal });
+  // Go once, reach end, go once more. Deduplicate during processing.
   let final_round_done = false;
-
   while ( !final_round_done ) {
-    // Collect currently existing elements
-    let messages = await get_message_container_data({ page });
-    log.debug(`msgs html: `, messages.html[0]);
-    log.debug(`reply_ids:`, messages.reply_ids);
+    // If reached bottom in previous scroll, finish this round and then stop
+    final_round_done = reached_goal;
 
-    // Get thread data for current elements in the thread
-    let threads = await collect_threads({
-      page,
-      ids: messages.reply_ids,
-    });
-    // wait
-
-    // save one screen of messages and threads data as we go since
-    // we may not be able to collect a whole channel at once
-    // because of errors or computers going to sleep
+    // Collect current view's elements
+    let messages = await get_message_container_data();  // name? `get_current_messages_data`
+    let threads = await collect_threads({ ids: messages.reply_ids });  // `collect_message_threads`?
+    // Save in case of errors or computers going to sleep
     save_data({
       config, state,
       data: { messages: messages.html, threads }
     });
-
-    // prepare for next loop
-    // scroll to new position
-    let scroller_handle = await page.waitForSelector(`other`);
+    // Scroll to new spot
+    let scroller_handle = await page.waitForSelector(CHANNEL_SCROLLER_SELECTOR);
     position += await scroll_towards({
-      position, goal, scroller_handle 
+      goal_position, position, scroller_handle 
     });
-    await wait_for_movement({ page, seconds: .5 });
-
-    // Check if need final round after the last scroll
-    reached_goal = await reached_channel_goal({ page, position, goal });
-    final_round_done = final_round_done || reached_goal;
-
-    // save new start for next run of script
+    // Save new start for next run of loop or script
     save_state(`position`, position);
+    process.stdout.write(`\x1b[36m${ 'v' }\x1b[0m`);
+
+    // Decide if this is the last section we'll need to collect
+    reached_goal = await reached_channel_goal({ position, goal_position });
   }  // ends while need to collect
 };  // Ends collect_channel()
 
-async function scroll_to_start ({ page, state, config }) {
+async function scroll_to_start ({ state, config }) {
   log.debug(`scroll_to_start()`);
   // Sometimes page refuses to go a long distance in one go
   let position = 0;
-  let goal = state.position;
-  while ( !await reached_channel_goal({ page, position, goal }) ) {
-    // * 3 otherwise
-    let handler = scroller_handle = await page.waitForSelector(`.p-workspace__primary_view_body .c-scrollbar__hider`);
+  let goal_position = state.position;
+  let scroller_handle = await page.waitForSelector(CHANNEL_SCROLLER_SELECTOR);
+  while ( !await reached_channel_goal({ position, goal_position }) ) {
     position += await scroll_towards({
-      position, goal, scroller_handle 
+      position, goal_position, scroller_handle 
     });
-    await wait_for_movement({ page, seconds: .5 });
   }
 };
 
-// const page = ...
-
-// combo func that then needs 5 args?
-
-async function scroll_towards ({ position, goal, scroller_handle }) {
+async function scroll_towards ({ position, goal_position, scroller_handle }) {
   /** Returns new position int */
   log.debug(`scroll_towards()`);
-
-  let max_distance = await scroller_handle.evaluate( (element) => {
+  const scroller_height = await scroller_handle.evaluate( (element) => {
     return element.clientHeight;
   });
-  // soooooo nested, and non-async in async
-  let distance = calculate_scroll_distance({ position, goal, max_distance });
-  let distance = await scroller_handle.evaluate( (element, { distance }) => {
+  // soooooo nested
+  const distance = calculate_scroll_distance({
+    current_position: position,
+    goal_position,
+    scroller_height
+  });
+  await scroller_handle.evaluate( (element, { distance }) => {
     element.scrollBy(0, distance);
   }, { distance });
+  await wait_for_movement({ seconds: 1 });
+
   return distance;
 }
 
-// goal position, current position
-function calculate_scroll_distance({ current_position, goal_position, max_distance }) {
-  log.debug(`calculate_scroll_distance() absolutes: goal_position ${Math.abs(goal_position)}, pos ${Math.abs(current_position)}, diff ${Math.abs(goal_position) - Math.abs(current_position)}, dist ${Math.abs(distance)}`);
+function get_channel_goal ({ position, max_distance_wanted }) {
+  log.debug(`get_channel_goal()`);
+  // In case travel_distance is `end` or something (to inifitely scroll to the top)
+  if ( typeof max_distance_wanted === `string` ) {
+    return max_distance_wanted
+  } else {
+    const direction_up = -1;
+    const positive_goal = Math.abs(position) + Math.abs(max_distance_wanted)
+    return direction_up * positive_goal;
+  }
+}
+
+function calculate_scroll_distance ({ current_position, goal_position, scroller_height }) {
+  log.debug(`calculate_scroll_distance(): goal_position ${goal_position}, pos ${current_position}, diff ${goal_position - current_position}`);
   // Don't overshoot. Math justification:
   // goal_position = 10, current_position = 1, distance = 20, desired = 9
   // goal_position = 100, current_position = 1, distance = 20, desired = 20
   // min( 10 - 1, 20) = 9, min( 100 - 1, 20) = 20
+  const direction_up = -1;
+
+  // TODO: Can we correctly calculate `goal_position` based on top
+  // element before getting in here?
+  // If dev wants to get to the top, scroll the maximum distance allowed
+  if ( [ `end`, `top`, `infinite`, `all` ].includes( goal_position ) ) {
+    log.debug(`scroll distance (scroller height): ${ direction_up * scroller_height }`);
+    return direction_up * scroller_height;
+  }
 
   // Math.abs: Make sure direction of these individual items doesn't matter
-  let distance_to_goal = Math.abs(goal_position) - Math.abs(current_position);
-  let max_distance_to_travel = Math.abs(max_distance);
-  let actual_distance = Math.min( distance_to_goal, max_distance_to_travel );
-  let direction_up = -1;
-  log.debug(`actual distance ${ actual_distance }`);
-  return direction_up * actual_distance;
+  const positive_distance_to_goal = Math.abs( goal_position - current_position );
+  const positive_actual_distance = Math.min(
+    positive_distance_to_goal, scroller_height
+  );
+  log.debug(`scroll distance (min): ${ direction_up * positive_actual_distance }`);
+  return direction_up * positive_actual_distance;
 }
 
-async function reached_channel_goal ({ page, position, goal }) {
+async function reached_channel_goal ({ position, goal_position }) {
   log.debug(`reached_channel_goal()`);
   let reached_end = false;
   let top = await page.$(`h1.p-message_pane__foreword__title`);
   if ( top ) {
-    log.debug(`--- at top ---`);
+    log.debug(`--- at top of channel ---`);
     reached_end = true;
-  } else if ( [ `end`, `top`, `infinite`, `all` ].includes( goal ) ) {
+  } else if ( [ `end`, `top`, `infinite`, `all` ].includes( goal_position ) ) {
     // Those strings means the dev wants to get all the way to the top.
     // Return false since we're not at the top.
     reached_end = false;
   } else {
-    reached_end = Math.abs(position) >= Math.abs(goal);
+    reached_end = Math.abs(position) >= Math.abs(goal_position);
   }
-  log.debug(`reached_channel_goal(): position: ${ position }, goal: ${ goal }, reached_end: ${reached_end}`);
+  log.debug(`reached_channel_goal(): position: ${ position }, goal_position: ${ goal_position }, reached_end: ${reached_end}`);
   return reached_end;
 }
 
-async function get_message_container_data ({ page }) {
+async function get_message_container_data () {
   log.debug(`get_message_container_data()`);
   let handle = await page.waitForSelector(`.p-workspace__primary_view_body`);
   let data = await handle.evaluate((elem) => {
-    let messages = document.querySelectorAll(`.p-workspace__primary_view_body .c-virtual_list__item:has(.c-message__reply_count)`);
+    let messages = elem.querySelectorAll(`.c-virtual_list__item:has(.c-message__reply_count)`);
     // DOM id of the messages with replies (and therefore threads)
     let reply_ids = Array.from(messages).map((item) => {return item.id});
     return {
@@ -205,20 +255,21 @@ async function get_message_container_data ({ page }) {
   return data;
 }
 
-async function collect_threads ({ page, ids }) {
+async function collect_threads ({ ids }) {
   log.debug(`collect_threads()`);
   let threads = {};
   // Click on each thread
   for ( let id of ids ) {
-    let thread_handle = await open_thread({ page, id });
-    let data = await collect_thread({ page, thread_handle });
-    await close_thread({ page, thread_handle });
+    let thread_handle = await open_thread({ id });
+    let data = await collect_thread({ thread_handle, id });
+    await close_thread({ thread_handle });
+    process.stdout.write(`\x1b[36m${ '.' }\x1b[0m`);
     threads[id] = data;
   }
   return threads;
 }
 
-async function open_thread ({ page, id }) {
+async function open_thread ({ id }) {
   log.debug(`open_thread() id: ${ id }`);
   // Note: page.$() as querySelectorAll won't work with these
   // ids (Example id: 1668547054.805359).
@@ -226,82 +277,68 @@ async function open_thread ({ page, id }) {
     let elem = document.getElementById(id);
     elem.querySelector('.c-message__reply_count').click();
   }, id);
-  await wait_for_movement({ page, seconds: 2 });
-  return await page.waitForSelector(`div[data-qa="threads_flexpane"]`);
+  await wait_for_movement({ seconds: 2 });
+  let thread_handle = await page.waitForSelector(`div[data-qa="threads_flexpane"]`);
+  log.debug(`thread_handle: ${ id }`);
+  return thread_handle
 }
 
-async function collect_thread ({ page, thread_handle }) {
+async function collect_thread ({ thread_handle, id }) {
   log.debug(`collect_thread()`);
   let thread_items = [];
-  let reached_end = await reached_thread_end({ thread_handle })
-  // Always collect at least once (some threads are at the
-  // bottom from the start).
-  let final_round_done = false;
+  let position = 0;
+  let reached_end = await reached_thread_top({ thread_handle, id });
 
+  // Go once, reach end, go once more. Deduplicate during processing.
+  let final_round_done = false;
   while ( !final_round_done ) {
-    let thread_contents = await get_thread_contents_and_scroll({ page, thread_handle });
+    // If reached bottom in previous scroll, finish this round and then stop
+    final_round_done = reached_end;
+    // Collect where we are
+    let thread_contents = await thread_handle.evaluate((elem) => {
+      return elem.outerHTML
+    });
+    // Scroll to new spot
+    position = await scroll_thread({ position, thread_handle });
     thread_items.push( thread_contents );
-    // Check if need one final round after the last scroll
-    reached_end = await reached_thread_end({ thread_handle });
-    final_round_done = final_round_done || reached_end;
+    // Decide if this is the last section we'll need to collect
+    reached_end = await reached_thread_top({ thread_handle, id });
   }
   return thread_items;
 }
 
-// BUG: THREADS ALSO START AT THE BOTTOM
-async function reached_thread_end ({ thread_handle }) {
-  log.debug(`reached_thread_end()`);
-  let reached = await thread_handle.evaluate((thread) => {
-    // This is from examining the DOM. Very fragile to updates.
-
-    // Get "reply" input top. The last thread element + some math
-    // will be able to match input_top
-    let input = thread.querySelector(`div[data-item-key="input"]`);
-    let input_top = parseInt(window.getComputedStyle(input).getPropertyValue('top').replace('px', ''));
-    
-    // Get all thread items
-    let items = Array.from(thread.querySelectorAll(`.c-virtual_list__item`));
-    // For each thread item, check if its top matches the calculation
-    for ( let item of items ) {
-      let item_bottom = item.clientHeight + parseInt(window.getComputedStyle(item).getPropertyValue('top').replace('px', ''))
-      if ( item_bottom === input_top ) {
-        return true;
-      }
-    }
-    return false;
-  });
-  return reached;
+async function reached_thread_top ({ thread_handle, id }) {
+  log.debug(`reached_thread_top() id:`, id);
+  let top_handle = await thread_handle.$(`div[data-item-key="${id}"]`);
+  log.debug(`top handle exists? (reached thread top): ${!!top_handle}, handle:`, top_handle);
+  return !!top_handle;
 }
 
-async function get_thread_contents_and_scroll ({ page, thread_handle }) {
-  log.debug(`get_thread_contents_and_scroll()`);
-  let thread_contents = await thread_handle.evaluate((elem) => {
-    return elem.outerHTML
-  });
-  let handler = scroller_handle = await page.waitForSelector(`other`);
-  position += await scroll_towards({
-    position, goal, scroller_handle 
-  });
-  await wait_for_movement({ page, seconds: 1 });
-  return thread_contents;
+async function scroll_thread ({ position, thread_handle }) {
+  log.debug(`scroll_thread()`);
+  const scroller_handle = await thread_handle.waitForSelector(`.c-scrollbar__hider`);
+  position += await scroll_towards({ position, goal_position: `top`, scroller_handle });
+  log.debug(`new_position: ${ position }`);
+  return position;
 }
 
-async function close_thread ({ page, thread_handle }) {
+async function close_thread ({ thread_handle }) {
   /** The width of the viewport is affected by opening a thread,
   *   scrolling the messages. Undo that. */
+  log.debug(`close_thread()`);
   await thread_handle.evaluate((elem) => {
     elem.querySelector('button[data-qa="close_flexpane"]').click();
   });
-  await wait_for_movement({ page, seconds: 1 });
+  await wait_for_movement({ seconds: 1 });
 }
 
-async function wait_for_movement ({ page, seconds }) {
+async function wait_for_movement ({ seconds }) {
   /** Wait, but with a clearer name. **/
   log.debug(`wait_for_movement()`);
-  await wait_for_load({ page, seconds });
+  await wait_for_load({ seconds });
 }
 
-async function wait_for_load ({ page, seconds }) {
+async function wait_for_load ({ seconds }) {
   /** Wait, but with a clearer name. **/
   log.debug(`wait_for_load()`);
   await page.waitForTimeout( 1000 * seconds );
@@ -317,19 +354,16 @@ function save_data ({ config, state, data }) {
   // List of message groups html
   let msgs_file_path = `${folder_path}/${config.messages_path}`;
   ensure_file_exists({ file_path: msgs_file_path, default_contents: `[]` });
-  console.log(`------\n\n`, fs.readFileSync(msgs_file_path), `\n\n-----`);
   let messages = JSON.parse(fs.readFileSync(msgs_file_path)) || [];
   messages.unshift(data.messages);
-  // log.debug(`save msgs:`, messages[0][0]);
-  fs.writeFileSync(msgs_file_path, JSON.stringify(messages));
+  fs.writeFileSync(msgs_file_path, JSON.stringify(messages, null, 2));
 
   // Object of threads' html by id
   let threads_file_path = `${folder_path}/${config.threads_path}`;
   ensure_file_exists({ file_path: threads_file_path, default_contents: `{}` });
   let threads = JSON.parse(fs.readFileSync(threads_file_path)) || {};
   threads = { ...threads, ...data.threads };
-  // log.debug( threads );
-  fs.writeFileSync(threads_file_path, JSON.stringify(threads));
+  fs.writeFileSync(threads_file_path, JSON.stringify(threads, null, 2));
 }
 
 function ensure_dir_exists ({ dir_path }) {

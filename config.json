@@ -3,6 +3,6 @@
   "channels": ["clean-slate"],
   "messages_path": "messages.json",
   "threads_path": "threads.json",
-  "viewport_height": 500,
-  "travel_distance": -2000
+  "viewport_height": 2000,
+  "travel_distance": 4000
 }
