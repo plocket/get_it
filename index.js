@@ -126,48 +126,51 @@ async function scroll_to_start ({ page, state, config }) {
   let position = 0;
   let goal = state.position;
   while ( !await reached_channel_goal({ page, position, goal }) ) {
-    let distance = calculate_scroll_distance({
-      position, goal,
-      max_distance: -1 * (config.viewport_height - 20)  // TODO: Change to actual height, remove config
-    });
-    // TODO: scroller_selector
-    position = await scroll({
-      page, position, distance,
+    position += await scroll({
+      page, position, goal,
       scroller_selector: `.p-workspace__primary_view_body .c-scrollbar__hider`
     });
   }
 };
 
-async function scroll ({ page, position, distance, scroller_selector }) {
+// combo func that then needs 5 args?
+
+async function scroll ({ page, position, goal, scroller_selector }) {
   /** Returns new position int */
   log.debug(`scroll()`);
-  scroller_selector = scroller_selector || `.p-workspace__primary_view_body .c-scrollbar__hider`;
+
+  let max_distance = await scroller_handle.evaluate( (element) => {
+    return element.clientHeight;
+  });
+  // soooooo nested, and non-async in async
+  let distance = calculate_scroll_distance({ position, goal, max_distance });
+
   scroller_handle = await page.waitForSelector(scroller_selector);
-  await scroller_handle.evaluate( (elem, { distance }) => {
-    elem.scrollBy(0, distance);
+  let distance = await scroller_handle.evaluate( (element, { distance }) => {
+    element.scrollBy(0, distance);
   }, { distance });
-  await wait_for_movement({ page, seconds: .5 });
-  // Move forward
-  position += distance;
-  log.debug(`scrolled: distance ${ distance }, position ${ position }`);
-  return position;
+  return distance;
 }
 
-function calculate_scroll_distance({ position, goal, max_distance }) {
-  log.debug(`calculate_scroll_distance() absolutes: goal ${Math.abs(goal)}, pos ${Math.abs(position)}, diff ${Math.abs(goal) - Math.abs(position)}, dist ${Math.abs(distance)}`);
+// goal position, current position
+function calculate_scroll_distance({ current_position, goal_position, max_distance }) {
+  log.debug(`calculate_scroll_distance() absolutes: goal_position ${Math.abs(goal_position)}, pos ${Math.abs(current_position)}, diff ${Math.abs(goal_position) - Math.abs(current_position)}, dist ${Math.abs(distance)}`);
   // Don't overshoot. Math justification:
-  // goal = 10, position = 1, distance = 20, desired = 9
-  // goal = 100, position = 1, distance = 20, desired = 20
+  // goal_position = 10, current_position = 1, distance = 20, desired = 9
+  // goal_position = 100, current_position = 1, distance = 20, desired = 20
   // min( 10 - 1, 20) = 9, min( 100 - 1, 20) = 20
-  // Convert to correct sign...?
-  let direction = Math.sign(max_distance);  // -1 for up, 1 for down
-  let distance_to_goal = Math.abs(goal) - Math.abs(position);
+
+  // // Convert to correct sign...?
+  // let direction = Math.sign(max_distance);  // -1 for up, 1 for down
+  //   //direction * Math.min(
+
+  // Math.abs: Make sure direction doesn't matter
+  let distance_to_goal = Math.abs(goal_position) - Math.abs(current_position);
   let max_distance_to_travel = Math.abs(max_distance);
-  let actual_distance = direction * Math.min(
-        distance_to_goal, max_distance_to_travel
-  );
+  let actual_distance = Math.min( distance_to_goal, max_distance_to_travel );
+  let direction_up = -1;
   log.debug(`actual distance ${ actual_distance }`);
-  return actual_distance;
+  return direction_up * actual_distance;
 }
 
 async function reached_channel_goal ({ page, position, goal }) {
