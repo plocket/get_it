@@ -94,6 +94,7 @@ async function collect_channel({
       page,
       ids: messages.reply_ids,
     });
+    // wait
 
     // save one screen of messages and threads data as we go since
     // we may not be able to collect a whole channel at once
@@ -105,10 +106,11 @@ async function collect_channel({
 
     // prepare for next loop
     // scroll to new position
-    position = await scroll({
-      page, position, goal,
-      distance: -1 * (config.viewport_height - 20)  // -1980
+    let scroller_handle = await page.waitForSelector(`other`);
+    position += await scroll_towards({
+      position, goal, scroller_handle 
     });
+    await wait_for_movement({ page, seconds: .5 });
 
     // Check if need final round after the last scroll
     reached_goal = await reached_channel_goal({ page, position, goal });
@@ -119,33 +121,34 @@ async function collect_channel({
   }  // ends while need to collect
 };  // Ends collect_channel()
 
-
 async function scroll_to_start ({ page, state, config }) {
   log.debug(`scroll_to_start()`);
   // Sometimes page refuses to go a long distance in one go
   let position = 0;
   let goal = state.position;
   while ( !await reached_channel_goal({ page, position, goal }) ) {
-    position += await scroll({
-      page, position, goal,
-      scroller_selector: `.p-workspace__primary_view_body .c-scrollbar__hider`
+    // * 3 otherwise
+    let handler = scroller_handle = await page.waitForSelector(`.p-workspace__primary_view_body .c-scrollbar__hider`);
+    position += await scroll_towards({
+      position, goal, scroller_handle 
     });
+    await wait_for_movement({ page, seconds: .5 });
   }
 };
 
+// const page = ...
+
 // combo func that then needs 5 args?
 
-async function scroll ({ page, position, goal, scroller_selector }) {
+async function scroll_towards ({ position, goal, scroller_handle }) {
   /** Returns new position int */
-  log.debug(`scroll()`);
+  log.debug(`scroll_towards()`);
 
   let max_distance = await scroller_handle.evaluate( (element) => {
     return element.clientHeight;
   });
   // soooooo nested, and non-async in async
   let distance = calculate_scroll_distance({ position, goal, max_distance });
-
-  scroller_handle = await page.waitForSelector(scroller_selector);
   let distance = await scroller_handle.evaluate( (element, { distance }) => {
     element.scrollBy(0, distance);
   }, { distance });
@@ -160,11 +163,7 @@ function calculate_scroll_distance({ current_position, goal_position, max_distan
   // goal_position = 100, current_position = 1, distance = 20, desired = 20
   // min( 10 - 1, 20) = 9, min( 100 - 1, 20) = 20
 
-  // // Convert to correct sign...?
-  // let direction = Math.sign(max_distance);  // -1 for up, 1 for down
-  //   //direction * Math.min(
-
-  // Math.abs: Make sure direction doesn't matter
+  // Math.abs: Make sure direction of these individual items doesn't matter
   let distance_to_goal = Math.abs(goal_position) - Math.abs(current_position);
   let max_distance_to_travel = Math.abs(max_distance);
   let actual_distance = Math.min( distance_to_goal, max_distance_to_travel );
@@ -277,11 +276,11 @@ async function reached_thread_end ({ thread_handle }) {
 async function get_thread_contents_and_scroll ({ page, thread_handle }) {
   log.debug(`get_thread_contents_and_scroll()`);
   let thread_contents = await thread_handle.evaluate((elem) => {
-    let html = `` + elem.outerHTML;
-    // scroll (down this time) after getting current contents
-    let scroller = elem.querySelector(`.c-scrollbar__hider`);
-    scroller.scrollBy(0, scroller.clientHeight );
-    return html
+    return elem.outerHTML
+  });
+  let handler = scroller_handle = await page.waitForSelector(`other`);
+  position += await scroll_towards({
+    position, goal, scroller_handle 
   });
   await wait_for_movement({ page, seconds: 1 });
   return thread_contents;
