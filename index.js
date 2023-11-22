@@ -117,42 +117,39 @@ async function start() {
 
   // Make very big viewport?
   await page.setViewport({ height: config.viewport_height, width: 1000 });
-  process.stdout.write(`\x1b[36m${ 'Starting... ' }\x1b[0m`);
-  await log_in();
+  log.print_inline({ message: 'Starting... ' });
+  await go_to_log_in();
+  await auth();
   // TODO: Create folder for channel if it doesn't exist
   // TODO: loop through channels
   await go_to_channel({ channel_name: state.current_channel });
-  process.stdout.write(`\x1b[36m${ 'Now-ish! ' }\x1b[0m`);
+  log.print_inline({ message: 'Now-ish! ' });
   await collect_channel({ config, state });
-  process.stdout.write(`\x1b[36m${ ' Done. Everything is probably fine.' }\x1b[0m`);
+  log.print_inline({ message: ' Done. Everything is probably fine.' });
 
-  browser.close();
+  await browser.close();
 };
 
-async function log_in() {
-  log.debug(`log_in()`);
+async function go_to_log_in() {
+  log.debug(`go_to_log_in()`);
   await page.goto(process.env.WORKSPACE, { waitUntil: `domcontentloaded` });
-  // Choose to log in by email
   let [email_reponse] = await Promise.all([
     page.waitForNavigation({ waitUntil: `domcontentloaded` }),
+    // Choose to log in by email
     page.click(`input[type="submit"]`),
   ]);
-  // Log in
-  let response = await auth();
-  await wait_for_load({ seconds: .5 });
-  return page;
 };
 
 async function auth() {
   await page.type(`input#email`, process.env.EMAIL);
   await page.type(`input#password`, process.env.PASSWORD);
   // Submit and go to workspace
+  // TODO: handle wrong email/password
   let [auth_reponse] = await Promise.all([
     page.waitForNavigation({ waitUntil: `domcontentloaded` }),
     page.click(`button[type="submit"]`),
   ]);
   await wait_for_load({ seconds: 20 });
-  return auth_reponse;
 }
 
 async function go_to_channel({ channel_name }) {
@@ -195,7 +192,7 @@ async function collect_channel({ config, state }) {
     });
     // Save new start for next run of loop or script
     save_state({ config, state });
-    process.stdout.write(`\x1b[36m${ 'M' }\x1b[0m`);
+    log.print_inline({ message: 'M' });
 
     // Decide if this is the last section we'll need to collect
     reached_goal = await reached_channel_goal({ position: state.position, goal_position });
@@ -314,7 +311,7 @@ async function collect_threads ({ ids }) {
     let thread_handle = await open_thread({ id });
     let data = await collect_thread({ thread_handle, id });
     await close_thread({ thread_handle });
-    process.stdout.write(`\x1b[36m${ 't' }\x1b[0m`);
+    log.print_inline({ message: 't' });
     threads[id] = data;
   }
   return threads;
@@ -505,6 +502,9 @@ const log = {
     if ( process.env.DEBUG ) {
       console.log( `Debug:`, ...arguments );
     }
+  },
+  print_inline: function ({ message }) {
+    process.stdout.write(`\x1b[36m${ message }\x1b[0m`);
   }
 }
 
