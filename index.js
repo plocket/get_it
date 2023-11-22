@@ -43,6 +43,39 @@ Press download? How to download
     fs.writeFileSync(outputFilename, fileContent);
 */
 
+/*
+TODO: Avoid computer sleep?
+https://www.phind.com/search?cache=fa44k6upsvm5wusle7y27ix7
+
+Maybe for mac:
+caffeinate -i node your-script.js
+
+const { exec } = require('child_process');
+
+// Function to prevent the computer from sleeping
+function preventSleep() {
+ if (process.platform === 'darwin') {
+   // macOS
+   exec('caffeinate -i -t 3600');
+ } else if (process.platform === 'win32') {
+   // Windows
+   exec('powercfg /change standby-timeout-ac 0');
+   exec('powercfg /change hibernate-timeout-ac 0');
+ } else {
+   console.log('Unsupported platform');
+ }
+}
+
+// Call the function to prevent the computer from sleeping
+preventSleep();
+
+This script checks the platform of the operating system and runs the appropriate command to prevent the computer from sleeping. The -t 3600 option in the caffeinate command tells the system to sleep after an hour, which effectively prevents the computer from sleeping while the script is running. The standby-timeout-ac and hibernate-timeout-ac options in the powercfg command tell the system to never go to sleep while plugged in 4.
+
+Please note that these commands need to be run with administrator privileges. If you're running your script from the command line, you may need to run it with sudo on macOS or as an administrator on Windows.
+
+Also, this solution does not revert the sleep settings back to their original state when the script finishes running. If you want to do this, you would need to save the original sleep settings before running the script and then restore them afterwards. This would require additional system-specific commands, and it's not straightforward to do this in a cross-platform way.
+*/
+
 // TODO: config is really args?
 let config = JSON.parse(fs.readFileSync(`./config.json`));
 let state = JSON.parse(fs.readFileSync(`./${ config.state_path }`));
