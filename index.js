@@ -6,6 +6,22 @@ require(`dotenv`).config();
 
 /*
 TODO: download files
+Maybe puppeteer download: https://www.phind.com/search?cache=rbpyjs67h37mraympowvncwt
+
+Do file download names have any relationship to thumbnail names???
+png
+  thumbnail: src="https://files.slack.com/files-tmb/T024F66L9-F031GNUHNQY-5afdfe8048/different_kind_of_tags_maybe_480.png"
+  download: href="https://files.slack.com/files-pri/T024F66L9-F031GNUHNQY/download/different_kind_of_tags_maybe.png?origin_team=T024F66L9" (team = url? url: https://app.slack.com/client/T024F66L9/DATL8MFJ9)
+mp4
+  thumbnail: style="background-image: url(&quot;https://files.slack.com/files-tmb/T024F66L9-F02UT2JEM9V-eb8d305b03/file_from_ios_thumb_video.jpeg&quot;);"
+  can click "download" button in "more actions" menu, but no link
+  download: href="https://files.slack.com/files-pri/T024F66L9-F02UT2JEM9V/download/file_from_ios.mp4?origin_team=T024F66L9"
+  does not include 'mp4' file-type?
+pdf
+  thumbnail: style="background-image: url(&quot;https://files.slack.com/files-tmb/T024F66L9-F0674TQB925-e43741746b/209a_258e_motion_for_impoundment_thumb_pdf.png&quot;);"
+  download: href="https://files.slack.com/files-pri/T024F66L9-F0674TQB925/download/209a_258e_motion_for_impoundment.pdf?origin_team=T024F66L9"
+  still have to expand unexpanded
+
 In messages (in a message, even?):
 
 Get all action buttons in message:
@@ -239,8 +255,9 @@ function calculate_scroll_distance ({ current_position, goal_position, scroller_
   // min( 10 - 1, 20) = 9, min( 100 - 1, 20) = 20
   const direction_up = -1;
 
-  // TODO: Can we correctly calculate `goal_position` based on top
-  // element before getting in here?
+  // TODO: Can we correctly calculate `goal_position` based on top element
+  // before getting in here? Probably not as it's often off the screen
+
   // If dev wants to get to the top, scroll the maximum distance allowed
   if ( [ `end`, `top`, `infinite`, `all` ].includes( goal_position ) ) {
     log.debug(`scroll distance (scroller height): ${ direction_up * scroller_height }`);
@@ -390,7 +407,7 @@ function save_data ({ config, state, data }) {
   // const messages = JSON.parse( fs.readFileSync( msgs_file_path )) || [];
   const messages = get_value_safely({ file_path: msgs_file_path, default_value: [] });
   messages.unshift( data.messages );
-  write_files_safely({
+  write_file_safely({
     file_path: msgs_file_path,
     contents: JSON.stringify( messages, null, 2 ),
   });
@@ -399,7 +416,7 @@ function save_data ({ config, state, data }) {
   const threads_file_path = `${ folder_path }/${ config.threads_path }`;
   const threads = get_value_safely({ file_path: threads_file_path, default_value: {} });
   const new_threads = { ...threads, ...data.threads };
-  write_files_safely({
+  write_file_safely({
     file_path: threads_file_path,
     contents: JSON.stringify( new_threads, null, 2 ),
   });
@@ -407,7 +424,7 @@ function save_data ({ config, state, data }) {
 
 function save_state ({ config, state }) {
   log.debug(`save_state():`, state);
-  const did_exist = write_files_safely({
+  const did_exist = write_file_safely({
     file_path: config.state_path,
     contents: JSON.stringify( state, null, 2 )
   });
@@ -443,8 +460,8 @@ function get_value_safely ({ file_path, default_value }) {
   }
 }
 
-function write_files_safely ({ file_path, contents }) {
-  log.debug(`write_files_safely()`);
+function write_file_safely ({ file_path, contents }) {
+  log.debug(`write_file_safely()`);
   try {
     can_access_path_correctly({ path: file_path });
     fs.writeFileSync(file_path, contents);
