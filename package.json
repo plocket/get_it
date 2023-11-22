@@ -1,5 +1,5 @@
 {
-  "name": "get_it",
+  "name": "slacker",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
@@ -8,14 +8,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/plocket/get_it.git"
+    "url": "git+https://github.com/plocket/slacker.git"
   },
   "author": "",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/plocket/get_it/issues"
+    "url": "https://github.com/plocket/slacker/issues"
   },
-  "homepage": "https://github.com/plocket/get_it#readme",
+  "homepage": "https://github.com/plocket/slacker#readme",
   "dependencies": {
     "dotenv": "^16.3.1",
     "puppeteer": "^21.5.2"
