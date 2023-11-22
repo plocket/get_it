@@ -68,12 +68,14 @@ async function start() {
 
   // Make very big viewport?
   await page.setViewport({ height: config.viewport_height, width: 1000 });
+  process.stdout.write(`\x1b[36m${ 'Starting... ' }\x1b[0m`);
   await log_in();
   // TODO: Create folder for channel if it doesn't exist
   // TODO: loop through channels
   await go_to_channel({ channel_name: state.current_channel });
+  process.stdout.write(`\x1b[36m${ 'Now-ish! ' }\x1b[0m`);
   await collect_channel({ config, state });
-  process.stdout.write(`\x1b[36m${ '@' }\x1b[0m`);
+  process.stdout.write(`\x1b[36m${ ' Done. Everything is probably fine.' }\x1b[0m`);
 
   browser.close();
 };
@@ -90,7 +92,7 @@ async function log_in() {
   let response = await auth();
   await wait_for_load({ seconds: .5 });
   return page;
-};  // Ends log_in()
+};
 
 async function auth() {
   await page.type(`input#email`, process.env.EMAIL);
@@ -114,15 +116,14 @@ async function collect_channel({ config, state }) {
   /** Collect all data from the start to the the scroll distance */
   log.debug(`collect_channel()`);
 
-  let position = state.position;
   const goal_position = get_channel_goal ({
-    position,
+    position: state.position,
     // `config.max_travel_pixels`? `config.max_travel/distance_wanted`?
     max_distance_wanted: config.travel_distance,
   })
   await scroll_to_start({ state, config });
   // Are we already finished?
-  let reached_goal = await reached_channel_goal({ position, goal_position });
+  let reached_goal = await reached_channel_goal({ position: state.position, goal_position });
 
   // Go once, reach end, go once more. Deduplicate during processing.
   let final_round_done = false;
@@ -140,15 +141,15 @@ async function collect_channel({ config, state }) {
     });
     // Scroll to new spot
     let scroller_handle = await page.waitForSelector(CHANNEL_SCROLLER_SELECTOR);
-    position += await scroll_towards({
-      goal_position, position, scroller_handle 
+    state.position += await scroll_towards({
+      goal_position, position: state.position, scroller_handle 
     });
     // Save new start for next run of loop or script
-    save_state(`position`, position);
-    process.stdout.write(`\x1b[36m${ 'v' }\x1b[0m`);
+    save_state({ config, state });
+    process.stdout.write(`\x1b[36m${ 'M' }\x1b[0m`);
 
     // Decide if this is the last section we'll need to collect
-    reached_goal = await reached_channel_goal({ position, goal_position });
+    reached_goal = await reached_channel_goal({ position: state.position, goal_position });
   }  // ends while need to collect
 };  // Ends collect_channel()
 
@@ -263,7 +264,7 @@ async function collect_threads ({ ids }) {
     let thread_handle = await open_thread({ id });
     let data = await collect_thread({ thread_handle, id });
     await close_thread({ thread_handle });
-    process.stdout.write(`\x1b[36m${ '.' }\x1b[0m`);
+    process.stdout.write(`\x1b[36m${ 't' }\x1b[0m`);
     threads[id] = data;
   }
   return threads;
@@ -348,22 +349,35 @@ function save_data ({ config, state, data }) {
   /** `data` {obj} - .messages and .threads */
   log.debug(`save_data()`);
 
-  let folder_path = `data/${state.current_channel}`;
+  let folder_path = `data/${ state.current_channel }`;
   ensure_dir_exists({ dir_path: folder_path })
 
   // List of message groups html
-  let msgs_file_path = `${folder_path}/${config.messages_path}`;
-  ensure_file_exists({ file_path: msgs_file_path, default_contents: `[]` });
-  let messages = JSON.parse(fs.readFileSync(msgs_file_path)) || [];
-  messages.unshift(data.messages);
-  fs.writeFileSync(msgs_file_path, JSON.stringify(messages, null, 2));
+  const msgs_file_path = `${ folder_path }/${ config.messages_path }`;
+  // const messages = JSON.parse( fs.readFileSync( msgs_file_path )) || [];
+  const messages = get_value_safely({ file_path: msgs_file_path, default_value: [] });
+  messages.unshift( data.messages );
+  write_files_safely({
+    file_path: msgs_file_path,
+    contents: JSON.stringify( messages, null, 2 ),
+  });
 
   // Object of threads' html by id
-  let threads_file_path = `${folder_path}/${config.threads_path}`;
-  ensure_file_exists({ file_path: threads_file_path, default_contents: `{}` });
-  let threads = JSON.parse(fs.readFileSync(threads_file_path)) || {};
-  threads = { ...threads, ...data.threads };
-  fs.writeFileSync(threads_file_path, JSON.stringify(threads, null, 2));
+  const threads_file_path = `${ folder_path }/${ config.threads_path }`;
+  const threads = get_value_safely({ file_path: threads_file_path, default_value: {} });
+  const new_threads = { ...threads, ...data.threads };
+  write_files_safely({
+    file_path: threads_file_path,
+    contents: JSON.stringify( new_threads, null, 2 ),
+  });
+}
+
+function save_state ({ config, state }) {
+  log.debug(`save_state():`, state);
+  const did_exist = write_files_safely({
+    file_path: config.state_path,
+    contents: JSON.stringify( state, null, 2 )
+  });
 }
 
 function ensure_dir_exists ({ dir_path }) {
@@ -383,18 +397,32 @@ function ensure_dir_exists ({ dir_path }) {
   }  // ends try
 }
 
-function ensure_file_exists ({ file_path, default_contents }) {
-  log.debug(`ensure_file_exists()`);
+function get_value_safely ({ file_path, default_value }) {
+  log.debug(`get_value_safely()`);
+  try {
+    return JSON.parse( fs.readFileSync( file_path ));
+  } catch ( error ) {
+    // We don't care about files that don't exist
+    if ( error.code !== `ENOENT` ) {
+      log.debug(`JSON parse messages file error:`, error);
+    }
+    return default_value;
+  }
+}
+
+function write_files_safely ({ file_path, contents }) {
+  log.debug(`write_files_safely()`);
   try {
     can_access_path_correctly({ path: file_path });
+    fs.writeFileSync(file_path, contents);
   } catch ( error ) {
 
     if ( error.code === `ENOENT` ) {
       log.debug(`Creating ${ file_path }`);
-      fs.writeFileSync(file_path, default_contents);
+      fs.writeFileSync(file_path, contents);
       log.debug(`Created ${ file_path }`);
     } else {
-       throw( error )
+       throw( error );
     }
 
   }  // ends try
@@ -408,6 +436,7 @@ function can_access_path_correctly ({ path }) {
     log.debug(`The ${ path } path exists`);
     fs.accessSync( path, fs.constants.W_OK );
     log.debug(`You can write to ${ path }`);
+    return true;
 
   } catch ( error ) {
 
@@ -421,13 +450,9 @@ function can_access_path_correctly ({ path }) {
   }  // ends try
 }
 
-function save_state (key, value) {
-  log.debug(`save_state(): key "${ key }", value: ${ value }`);
-}
-
 const log = {
   debug: function () {
-    if (process.env.DEBUG) {
+    if ( process.env.DEBUG ) {
       console.log( `Debug:`, ...arguments );
     }
   }
