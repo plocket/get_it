@@ -322,7 +322,7 @@ async function reached_channel_goal ({ position, goal_position }) {
   let top = await page.$(`h1.p-message_pane__foreword__title`);
   if ( top ) {
     console.log(`--- reached top of channel ---`);
-    log.debug(`--- at top of channel ---`);
+    // log.debug(`--- at top of channel ---`);
     reached_end = true;
   } else if ( [ `end`, `top`, `infinite`, `all` ].includes( goal_position ) ) {
     // Those strings means the dev wants to get all the way to the top.
@@ -390,7 +390,7 @@ async function collect_thread ({ thread_handle, id }) {
   // a user of the Slack channel, so the bottom is closer.
 
   // TODO: actually, in a private window, it seems to start at the top?
-  // so I'm not sure what these windows are like. I assume like private
+  // I'm not sure what puppeteer windows are like. I assume like private
   // windows...
   await scroll_to_thread_bottom({ thread_handle, id, position });
 
@@ -399,7 +399,8 @@ async function collect_thread ({ thread_handle, id }) {
 
   // Go once, reach end, go once more. Deduplicate during processing.
   let final_round_done = false;
-  while ( !final_round_done ) {
+  let abort = false;
+  while ( !abort && !final_round_done ) {
     // If reached bottom in previous scroll, finish this round and then stop
     final_round_done = reached_end;
 
@@ -413,8 +414,11 @@ async function collect_thread ({ thread_handle, id }) {
     // Scroll to new spot
     position = await scroll_thread_up({ position, thread_handle });
     console.log(`thread - position in thread:`, position);
-    if (Math.abs(position) > 36233) {
-      await page.screenshot({path: `thread_up_${id}_${position}.jpg`});
+    if (Math.abs(position) > 30000) {
+      // Assume this thread is shorter than 30,000 pixels. Longer
+      // ones will have to find their own way in the world.
+      abort = true
+      // await page.screenshot({path: `thread_up_${id}_${position}.jpg`});
     }
     // Decide if this is the last section we'll need to collect
     reached_end = await reached_thread_top({ thread_handle, id });
@@ -431,11 +435,10 @@ async function scroll_to_thread_bottom ({ thread_handle, id, position }) {
     to_thread_bottom_count++;
     if ( to_thread_bottom_count > 100 ) {
       // We're going to assume it's a bug and the thread isn't really
-      // 200,000 pixels tall
+      // 200,000 pixels tall and there was just a pixel math problem
       abort = true;
       // await page.screenshot({path: `thread_down_${id}_${position}.jpg`});
     }
-
   }
 }
 
@@ -448,7 +451,6 @@ async function reached_thread_bottom ({ thread_handle }) {
     // will be able to match input_top
     const input = thread.querySelector(`div[data-item-key="input"]`);
     const input_top = parseInt(window.getComputedStyle(input).getPropertyValue('top').replace('px', ''));
-    // 647
 
     // Get all thread items
     const items = Array.from(thread.querySelectorAll(`.c-virtual_list__item`));
@@ -456,7 +458,6 @@ async function reached_thread_bottom ({ thread_handle }) {
     for ( let item of items ) {
       const item_bottom = item.clientHeight + parseInt(window.getComputedStyle(item).getPropertyValue('top').replace('px', ''))
       if ( item_bottom >= input_top ) {
-        // 675
         console.log( `\n\n`, item, `\n\n` );
         return true;
       }
