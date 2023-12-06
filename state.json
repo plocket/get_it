@@ -1,5 +1,7 @@
 {
-  "finished_channels": [],
-  "current_channel": "clean-slate",
-  "position": 0
+  "finished_channels": [
+    "clean-slate"
+  ],
+  "current_channel": "justice-at-cfa",
+  "position": -21828
 }

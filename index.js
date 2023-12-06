@@ -120,13 +120,14 @@ const CHANNEL_SCROLLER_SELECTOR = `.p-workspace__primary_view_body .c-scrollbar_
 
 async function start() {
   log.debug(`start()`);
-
   const browser = await puppeteer.launch({
     // Have to interact with the browser prompt manually
     headless: !process.env.DEBUG,
     devtools: process.env.DEBUG,
   });
   page = await browser.newPage();
+
+  console.log(new Date().toLocaleString());
 
   // Make very big viewport?
   await page.setViewport({ height: config.viewport_height, width: 1000 });
@@ -136,7 +137,7 @@ async function start() {
   // TODO: Create folder for channel if it doesn't exist
   // TODO: loop through channels
   await go_to_channel({ channel_name: state.current_channel });
-  log.print_inline({ message: 'Now-ish! ' });
+  log.print_inline({ message: 'Now-ish! \n' });
   await collect_channel({ config, state });
   log.print_inline({ message: ' Done. Everything is probably fine.' });
 
@@ -209,10 +210,10 @@ async function collect_channel({ config, state }) {
     // If reached bottom in previous scroll, finish this round and then stop
     final_round_done = reached_goal;
 
+    console.log(`* channel - collecting at:`, state.position);
     // Collect current view's elements
     let messages = await get_message_container_data();  // name? `get_current_messages_data`
     let threads = await collect_threads({ ids: messages.reply_ids });  // `collect_message_threads`?
-    console.log(`* channel - collecting at:`, state.position);
     // Save in case of errors or computers going to sleep
     save_data({
       config, state,
@@ -235,7 +236,7 @@ async function collect_channel({ config, state }) {
 
 async function scroll_to_start ({ state, config }) {
   log.debug(`scroll_to_start()`);
-  console.log(`scroll to starting position in the channel:`, state.position);
+  console.log(`scroll to starting position in the channel. Starting position is`, state.position);
   // Sometimes page refuses to go a long distance in one go
   let position = 0;
   let goal_position = state.position;
@@ -413,7 +414,7 @@ async function collect_thread ({ thread_handle, id }) {
     position = await scroll_thread_up({ position, thread_handle });
     console.log(`thread - position in thread:`, position);
     if (Math.abs(position) > 36233) {
-      await page.screenshot({path: `screenshot_${id}_${position}.jpg`});
+      await page.screenshot({path: `thread_up_${id}_${position}.jpg`});
     }
     // Decide if this is the last section we'll need to collect
     reached_end = await reached_thread_top({ thread_handle, id });
@@ -423,35 +424,47 @@ async function collect_thread ({ thread_handle, id }) {
 
 async function scroll_to_thread_bottom ({ thread_handle, id, position }) {
   log.debug(`scroll_to_thread_bottom() position:`, position);
-  while ( !await reached_thread_bottom({ thread_handle, id })) {
+  let to_thread_bottom_count = 0;
+  let abort = false;
+  while ( !await reached_thread_bottom({ thread_handle, id }) && !abort ) {
     position = await scroll_thread_down({ position, thread_handle });
+    to_thread_bottom_count++;
+    if ( to_thread_bottom_count > 100 ) {
+      // We're going to assume it's a bug and the thread isn't really
+      // 200,000 pixels tall
+      abort = true;
+      // await page.screenshot({path: `thread_down_${id}_${position}.jpg`});
+    }
+
   }
 }
 
 async function reached_thread_bottom ({ thread_handle }) {
   log.debug(`reached_thread_bottom()`);
-  const reached = await thread_handle.evaluate((thread) => {
+  const reached_bottom = await thread_handle.evaluate((thread) => {
     // This is from examining the DOM. Very fragile to updates.
 
     // Get "reply" input top. The last thread element + some math
     // will be able to match input_top
     const input = thread.querySelector(`div[data-item-key="input"]`);
     const input_top = parseInt(window.getComputedStyle(input).getPropertyValue('top').replace('px', ''));
+    // 647
 
     // Get all thread items
     const items = Array.from(thread.querySelectorAll(`.c-virtual_list__item`));
     // For each thread item, check if its top matches the calculation
     for ( let item of items ) {
       const item_bottom = item.clientHeight + parseInt(window.getComputedStyle(item).getPropertyValue('top').replace('px', ''))
-      if ( item_bottom === input_top ) {
+      if ( item_bottom >= input_top ) {
+        // 675
         console.log( `\n\n`, item, `\n\n` );
         return true;
       }
     }
     return false;
   });
-  log.debug(`reached_thread_bottom:`, reached);
-  return reached;
+  log.debug(`reached_bottom:`, reached_bottom);
+  return reached_bottom;
 }
 
 async function scroll_thread_down ({ position, thread_handle }) {
