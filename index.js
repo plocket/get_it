@@ -118,18 +118,20 @@ let page = null;
 
 const CHANNEL_SCROLLER_SELECTOR = `.p-workspace__primary_view_body .c-scrollbar__hider`;
 
-async function try_to_collect() {
-  console.log(`Current date and time: ${new Date().toLocaleString()}`);
+async function start() {
   try {
-    await start();
+    await try_to_collect();
   } catch (error) {
-    console.log(`Ended at: ${new Date().toLocaleString()}`);
+    console.log(`x Errored at: ${new Date().toLocaleString()}`);
+    await page.screenshot({ path: `page_error.jpg` });
+    const body = await page.evaluate(`body`, (elem)=>{ return elem.outerHTML });
+    console.log(body);
     throw error;
   }
-  console.log(`Ended at: ${new Date().toLocaleString()}`);
+  console.log(`✔ Ended at: ${new Date().toLocaleString()}`);
 }
 
-async function start() {
+async function try_to_collect() {
   log.debug(`start()`);
   const browser = await puppeteer.launch({
     // Have to interact with the browser prompt manually
@@ -137,6 +139,8 @@ async function start() {
     devtools: process.env.DEBUG,
   });
   page = await browser.newPage();
+
+  console.log(`Current date and time: ${new Date().toLocaleString()}`);
 
   // Make very big viewport?
   await page.setViewport({ height: config.viewport_height, width: 1000 });
@@ -254,7 +258,7 @@ async function collect_channel({ config, state }) {
 
 async function scroll_to_start ({ state, config }) {
   log.debug(`scroll_to_start()`);
-  console.log(`scroll to starting position in the channel. Starting position is`, state.position);
+  console.log(`scroll to starting position in the channel "${ state.current_channel }". Starting position is`, state.position);
   // Sometimes page refuses to go a long distance in one go
   let position = 0;
   let goal_position = state.position;
@@ -387,10 +391,10 @@ async function open_thread ({ id }) {
   log.debug(`open_thread() id: ${ id }`);
   // Note: page.$() as querySelectorAll won't work with these
   // ids (Example id: 1668547054.805359).
-  await page.evaluate((id) => {
+  await page.evaluate(( id ) => {
     let elem = document.getElementById(id);
     elem.querySelector('.c-message__reply_count').click();
-  }, id);
+  }, id );
   await wait_for_movement({ seconds: 2 });
   let thread_handle = await page.waitForSelector(`div[data-qa="threads_flexpane"]`);
   log.debug(`thread_handle:`, thread_handle);
@@ -421,6 +425,7 @@ async function collect_thread ({ thread_handle, id }) {
   while ( !abort && !final_round_done ) {
     // If reached bottom in previous scroll, finish this round and then stop
     final_round_done = reached_end;
+    console.log(`thread - position in thread:`, position);
 
     // Collect where we are
     let thread_contents = await thread_handle.evaluate((elem) => {
@@ -431,7 +436,6 @@ async function collect_thread ({ thread_handle, id }) {
 
     // Scroll to new spot
     position = await scroll_thread_up({ position, thread_handle });
-    console.log(`thread - position in thread:`, position);
     if (Math.abs(position) > 30000) {
       // Assume this thread is shorter than 30,000 pixels. Longer
       // ones will have to find their own way in the world.
@@ -541,7 +545,7 @@ async function close_thread ({ thread_handle }) {
   await thread_handle.evaluate((elem) => {
     elem.querySelector('button[data-qa="close_flexpane"]').click();
   });
-  await wait_for_movement({ seconds: 1 });
+  await wait_for_movement({ seconds: 3 });
 }
 
 async function wait_for_movement ({ seconds }) {

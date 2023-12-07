@@ -1,10 +1,14 @@
 {
-  "finished_channels": [
-    "clean-slate",
-    "justice-at-cfa",
-    "accessibility",
-    "civic-tech-taxonomy"
-  ],
-  "current_channel": "policy-politics",
-  "position": -63972
+  "finished_channels": {
+    "clean-slate": 1,
+    "justice-at-cfa": 1,
+    "accessibility": 1,
+    "civic-tech-taxonomy": 1,
+    "policy-politics": 1,
+    "code-for-pawnee": 1,
+    "decidim": 1,
+    "congress-meets-code": "Techniques for building partnerships with the US Congress AND connecting local Brigades with the district staffers near them. For the multi-Brigade collaborative project partnering with Congressional staffers, see #policy-politics."
+  },
+  "current_channel": "network-stewards",
+  "position": -1819
 }
