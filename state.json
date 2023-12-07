@@ -1,8 +1,10 @@
 {
   "finished_channels": [
     "clean-slate",
-    "justice-at-cfa"
+    "justice-at-cfa",
+    "accessibility",
+    "civic-tech-taxonomy"
   ],
-  "current_channel": "accessibility",
-  "position": 0
+  "current_channel": "policy-politics",
+  "position": -63972
 }

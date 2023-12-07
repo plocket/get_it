@@ -118,6 +118,17 @@ let page = null;
 
 const CHANNEL_SCROLLER_SELECTOR = `.p-workspace__primary_view_body .c-scrollbar__hider`;
 
+async function try_to_collect() {
+  console.log(`Current date and time: ${new Date().toLocaleString()}`);
+  try {
+    await start();
+  } catch (error) {
+    console.log(`Ended at: ${new Date().toLocaleString()}`);
+    throw error;
+  }
+  console.log(`Ended at: ${new Date().toLocaleString()}`);
+}
+
 async function start() {
   log.debug(`start()`);
   const browser = await puppeteer.launch({
@@ -126,8 +137,6 @@ async function start() {
     devtools: process.env.DEBUG,
   });
   page = await browser.newPage();
-
-  console.log(new Date().toLocaleString());
 
   // Make very big viewport?
   await page.setViewport({ height: config.viewport_height, width: 1000 });
@@ -139,7 +148,7 @@ async function start() {
   await go_to_channel({ channel_name: state.current_channel });
   log.print_inline({ message: 'Now-ish! \n' });
   await collect_channel({ config, state });
-  log.print_inline({ message: ' Done. Everything is probably fine.' });
+  log.print_inline({ message: 'Done. Everything is probably fine.\n' });
 
   // // Prepare for downloading
   // await page._client.send(`Page.setDownloadBehavior`, {
@@ -211,6 +220,15 @@ async function collect_channel({ config, state }) {
     final_round_done = reached_goal;
 
     console.log(`* channel - collecting at:`, state.position);
+    const top_date = await page.evaluate((elem) => {
+      const date_elem = document.querySelector('.c-button-unstyled.c-message_list__day_divider__label__pill');
+      if ( date_elem && date_elem.textContent ) {
+        return date_elem.textContent;
+      } else {
+        return `not visible`;
+      }
+    }, `.c-button-unstyled.c-message_list__day_divider__label__pill`);
+    console.log(`Current top-most date: ${top_date}`);
     // Collect current view's elements
     let messages = await get_message_container_data();  // name? `get_current_messages_data`
     let threads = await collect_threads({ ids: messages.reply_ids });  // `collect_message_threads`?
@@ -226,7 +244,7 @@ async function collect_channel({ config, state }) {
     // Scroll to new spot
     let scroller_handle = await page.waitForSelector(CHANNEL_SCROLLER_SELECTOR);
     state.position += await scroll_towards({
-      goal_position, position: state.position, scroller_handle 
+      goal_position, position: state.position, scroller_handle
     });
     // log.print_inline({ message: 'M' });
     // Decide if this is the last section we'll need to collect
@@ -375,7 +393,7 @@ async function open_thread ({ id }) {
   }, id);
   await wait_for_movement({ seconds: 2 });
   let thread_handle = await page.waitForSelector(`div[data-qa="threads_flexpane"]`);
-  log.debug(`thread_handle: ${ id }`);
+  log.debug(`thread_handle:`, thread_handle);
   return thread_handle
 }
 
@@ -430,40 +448,62 @@ async function scroll_to_thread_bottom ({ thread_handle, id, position }) {
   log.debug(`scroll_to_thread_bottom() position:`, position);
   let to_thread_bottom_count = 0;
   let abort = false;
-  while ( !await reached_thread_bottom({ thread_handle, id }) && !abort ) {
+  while ( !await reached_thread_bottom({ thread_handle }) && !abort ) {
     position = await scroll_thread_down({ position, thread_handle });
     to_thread_bottom_count++;
     if ( to_thread_bottom_count > 100 ) {
       // We're going to assume it's a bug and the thread isn't really
       // 200,000 pixels tall and there was just a pixel math problem
+      console.log(`Thread with id "${ id }" was too long. Over ${ position } pixels.`)
+      await page.screenshot({path: `scroll_to_thread_bottom_${ id }_${ position }.jpg`});
       abort = true;
-      // await page.screenshot({path: `thread_down_${id}_${position}.jpg`});
     }
   }
 }
 
+// temp debugging
+// let count = 0;
 async function reached_thread_bottom ({ thread_handle }) {
   log.debug(`reached_thread_bottom()`);
-  const reached_bottom = await thread_handle.evaluate((thread) => {
-    // This is from examining the DOM. Very fragile to updates.
+  // temp debugging
+  // console.log( thread_handle );
 
-    // Get "reply" input top. The last thread element + some math
-    // will be able to match input_top
-    const input = thread.querySelector(`div[data-item-key="input"]`);
+  // Might (rarely) be `null``
+  const input_handle = await thread_handle.$(`div[data-item-key="input"]`);
+  log.debug(`thread input handle:`, input_handle);
+  // console.log( '----------', input_handle );
+  if ( !input_handle ) {
+    // temp debugging
+    // await page.screenshot({path: `reached_thread_bottom_${count}.jpg`});
+    // console.log(await thread_handle.evaluate((elem)=>{return elem.outerHTML}));
+    // count++;
+
+    // I'm not absolutely sure why this sometimes isn't there. I suspect it's
+    // when the thread is too long, so we'll return that it's not the bottom.
+    // Infinite loop should be prevented higher up.
+    return false;
+  }
+
+  // Get "reply" input top position. The last thread element + some math
+  // will be able to match input_top
+  const reached_bottom = await input_handle.evaluate((input, thread) => {
+    // Fragile
+
+    // const input = thread.querySelector(`div[data-item-key="input"]`);
     const input_top = parseInt(window.getComputedStyle(input).getPropertyValue('top').replace('px', ''));
 
-    // Get all thread items
-    const items = Array.from(thread.querySelectorAll(`.c-virtual_list__item`));
-    // For each thread item, check if its top matches the calculation
-    for ( let item of items ) {
-      const item_bottom = item.clientHeight + parseInt(window.getComputedStyle(item).getPropertyValue('top').replace('px', ''))
+    // Get all thread posts
+    const posts = Array.from(thread.querySelectorAll(`.c-virtual_list__item`));
+    // For each thread post, check if its top matches the calculation
+    for ( let post of posts ) {
+      const item_bottom = post.clientHeight + parseInt(window.getComputedStyle(post).getPropertyValue('top').replace('px', ''))
       if ( item_bottom >= input_top ) {
-        console.log( `\n\n`, item, `\n\n` );
+        console.log( `\n\n`, post, `\n\n` );
         return true;
       }
     }
     return false;
-  });
+  }, thread_handle);
   log.debug(`reached_bottom:`, reached_bottom);
   return reached_bottom;
 }
