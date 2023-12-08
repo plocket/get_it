@@ -5,11 +5,31 @@
   "viewport_height": 2000,
   "travel_distance": "top",
   "todo": {
-    "network-stewards": "A place for community builders to collaborate on best practices and experience",
-    "clean-slate-brigade-congress-session-2020": 0,
-    "climate-crisis": 0,
-    "brigade-project-index": "https://brigade.cloud/projects/\n\nhttps://drive.google.com/drive/folders/1yaJe0QQSEw_fKljTJ719o9hQlJAKwGr5?usp=sharing\n\nMeet every other Wed (ref to 7/14/21) @ 6pm EST https://codeforamerica.zoom.us/j/96551956929?pwd=ME81S0ZUT1UwY3JTeFpaVXVZV25pdz09\nDiscussion and coordination around a comprehensive index of brigade projects. As of July 2021 this initiative includes index backend, index UI, PublicCode and Taxonomy.\n\nSee more at https://brigade.cloud/projects/",
-    "covid19response": "This channel is for sharing information, projects, resources, and asks relative to the COVID-19 emergency. See the pinned post for ways to get plugged in. Please also share projects you're working on.\nThis channel is to be used for the Brigade response to the COVID-19 pandemic. / Coordination with FEMA",
-    "design-and-research": "design and research / every other thursday at 2:30 / schedule here: https://docs.google.com/a/codeforamerica.org/spreadsheets/d/1_F3QfqGg25EjPhgx6DYHYYA9nbgohzIWLix1JUk7YDM/edit?usp=sharing"
+
+
+
+
+    "successful-brigade-practices": "T:Successful Brigade Practices - a Zoom seriesD:Monthly Zoom series in an ask-me-anything format with Host Bonnie Wolfe, Brigade Captain, Hack for LA",
+    "covid19response": "T:This channel is for sharing information, projects, resources, and asks relative to the COVID-19 emergency. See the pinned post for ways to get plugged in. Please also share projects you're working on.\nD:This channel is to be used for the Brigade response to the COVID-19 pandemic. / Coordination with FEMA",
+    "design-and-research": "T:design and research / every other thursday at 2:30 / schedule here: https://docs.google.com/a/codeforamerica.org/spreadsheets/d/1_F3QfqGg25EjPhgx6DYHYYA9nbgohzIWLix1JUk7YDM/edit?usp=sharingD:",
+    "digital-forms": "T:D:All things forms: Vendor platforms, open source libraries, user research and design resources...",
+    "engineering": "T:D:Generic engineering discussion: Unix, text editor debates, stupid Heroku R12 errors that won't go away, and much more.",
+    "engineeringhelp": "T:D:Channel for Fellows to ask Engineering questions and troubleshoot errors",
+    "rogue-swag-gang-2021": "T:D:workspace for designing unauthorized Brigade Congress swag",
+    "brigade-congress": "T:https://www.codeforamerica.org/brigade-congress\nD:Save the Date: Brigade Congress in St. Louis, MO Oct. 16-18",
+    "brigade-congress-contentcommittee": "T:D:",
+    "voting-rights": "T:D:",
+    "nac_elections": "T:Vote: http://c4a.me/vote\n\nElection Working Group Meeting Notes: https://docs.google.com/document/d/18vzMQBj0ggCJ2lCOjrs_MemkpsiBabXRQZMpeJCaecw/edit# (copy is https://docs.google.com/document/d/1AUDuxgLjOmF-VsPTcwRPs-t5Mk0xhyBWZTKgykSptog/edit#heading=h.rggymi7lr4cr)D:Get on your soapbox, ask candidates questions, kiss babies, wave to the peoples",
+    "random": "T:Random, off-topic, chatty things.D:A place for non-work banter, links, articles of interest, humor or anything else which you'd like concentrated in some place other than work-related channels.",
+    "template": "T:D:",
+    "announcements": "T:D:"
+  },
+  "requested_todo": {
+    "brigade-infrastructure": ""
+  },
+  "requested_done": {
+    "solutions-journalism": "T:D:Place in Slack for discussions about Solutions Journalism BAT",
+    "justice-at-cfa": 1,
+    "brigade-project-index": "T:https://brigade.cloud/projects/\n\nhttps://drive.google.com/drive/folders/1yaJe0QQSEw_fKljTJ719o9hQlJAKwGr5?usp=sharing\n\nMeet every other Wed (ref to 7/14/21) @ 6pm EST https://codeforamerica.zoom.us/j/96551956929?pwd=ME81S0ZUT1UwY3JTeFpaVXVZV25pdz09\nD:Discussion and coordination around a comprehensive index of brigade projects. As of July 2021 this initiative includes index backend, index UI, PublicCode and Taxonomy.\n\nSee more at https://brigade.cloud/projects/"
   }
 }

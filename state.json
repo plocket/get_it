@@ -3,12 +3,29 @@
     "clean-slate": 1,
     "justice-at-cfa": 1,
     "accessibility": 1,
-    "civic-tech-taxonomy": 1,
+    "civic-tech-taxonomy": "T:D:Let’s build a sharable taxonomy for civic tech!",
     "policy-politics": 1,
     "code-for-pawnee": 1,
     "decidim": 1,
-    "congress-meets-code": "Techniques for building partnerships with the US Congress AND connecting local Brigades with the district staffers near them. For the multi-Brigade collaborative project partnering with Congressional staffers, see #policy-politics."
+    "congress-meets-code": "Techniques for building partnerships with the US Congress AND connecting local Brigades with the district staffers near them. For the multi-Brigade collaborative project partnering with Congressional staffers, see #policy-politics.",
+    "network-stewards": "A place for community builders to collaborate on best practices and experience",
+    "tax-vol-general": "T:The whole tax benefits volunteer community.\nD:GetYourRefund volunteer channel #PeoplePower #Flexible Cash",
+    "2021-gyr-greeter-data-tracking": "T:D:",
+    "network-revisioning-datateam": "T:D:",
+    "network-revisioning-peer2peer": "T:D:This is a channel for the Network ReVisioning Peer to Peer Team. For project context: https://discourse.codeforamerica.org/t/network-revisioning-april-update/1084/n/nZoom: https://codeforamerica.zoom.us/j/2343106483",
+    "brigade-congress-2022-helpers": "T:D:",
+    "clean-slate-brigade-congress-session-2020": 0,
+    "brigade-project-index": "T:https://brigade.cloud/projects/\n\nhttps://drive.google.com/drive/folders/1yaJe0QQSEw_fKljTJ719o9hQlJAKwGr5?usp=sharing\n\nMeet every other Wed (ref to 7/14/21) @ 6pm EST https://codeforamerica.zoom.us/j/96551956929?pwd=ME81S0ZUT1UwY3JTeFpaVXVZV25pdz09\nD:Discussion and coordination around a comprehensive index of brigade projects. As of July 2021 this initiative includes index backend, index UI, PublicCode and Taxonomy.\n\nSee more at https://brigade.cloud/projects/",
+    "solutions-journalism": "T:D:Place in Slack for discussions about Solutions Journalism BAT",
+    "brigade-impact": "T:A place to discuss and ask questions about measuring the social impact of Brigade projects.D:",
+    "project-courtbot": "T:Courtbot (https://court.bot/) is a text-message app that helps keep you updated with your court cases. After cases are booked, clients can text their case number to (844) 329-6801 to receive automatic reminders of court dates.D:Failure-to-appear and failure-to-pay fines can quickly snowball, especially for those living paycheck-to-paycheck. CourtBot helps clients avoid mistakes that burden them and the criminal justice system. Let's implement Courtbot nationwide!",
+    "climate-crisis": "T:Collective action on the climate crisisD:Discussion of network-wide activities for Brigades to address the global climate crisis",
+    "hurricane_api": "T:START HERE: https://docs.google.com/document/d/1f_ODFvGzrOihfkckSxJ8hU4d9I3b389Rx4aAEFEHvTw/edit?usp=sharing (copy is https://docs.google.com/document/d/1q7zogHtjqFJBw5d0u_gDF4aWCrgpur_d1NHj9-60k24/edit#heading=h.bpax2rk6htt4)D:Brigade Actions During Hurricane Florence",
+    "integrated-benefits": "T:Open channel for folks working on integrated benefits to discussD:",
+    "cross-brigade-collab": "T:D:All the links you need are in this doc from the conference - Sharing Across Brigades doc:  http://bit.ly/brigadecollab (copy is https://docs.google.com/document/d/13DSB0MFjmKT3_cIoWIXxhrXL6yW_rOLVz8RhWU51ZFk/edit)",
+    "successful-brigade-practices": "T:Successful Brigade Practices - a Zoom seriesD:Monthly Zoom series in an ask-me-anything format with Host Bonnie Wolfe, Brigade Captain, Hack for LA",
+    "placeholder": 1
   },
-  "current_channel": "network-stewards",
-  "position": -1819
+  "current_channel": "covid19response",
+  "position": -76398
 }

@@ -143,7 +143,9 @@ async function try_to_collect() {
   console.log(`Current date and time: ${new Date().toLocaleString()}`);
 
   // Make very big viewport?
-  await page.setViewport({ height: config.viewport_height, width: 1000 });
+  const v_width = 1000
+  await page.setViewport({ height: config.viewport_height, width: v_width });
+  console.log(`The window is ${ config.viewport_height }px tall and ${ v_width }px wide`);
   log.print_inline({ message: 'Starting... ' });
   await go_to_log_in();
   await auth();
@@ -258,6 +260,12 @@ async function collect_channel({ config, state }) {
 
 async function scroll_to_start ({ state, config }) {
   log.debug(`scroll_to_start()`);
+
+  // I keep forgetting to reset to 0
+  if ( state.position !== 0 ) {
+    console.log(`\n==== TAKE NOTE!! Starting position is NOT`, 0, `====\n`);
+  }
+
   console.log(`scroll to starting position in the channel "${ state.current_channel }". Starting position is`, state.position);
   // Sometimes page refuses to go a long distance in one go
   let position = 0;
@@ -296,7 +304,8 @@ async function scroll_towards ({ position, goal_position, scroller_handle, direc
   await scroller_handle.evaluate( (element, { distance_and_direction }) => {
     element.scrollBy(0, distance_and_direction);
   }, { distance_and_direction });
-  await wait_for_movement({ seconds: 1 });
+  // Avoid "Loading replies..."
+  await wait_for_movement({ seconds: 2 });
 
   return distance_and_direction;
 }
