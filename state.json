@@ -24,8 +24,13 @@
     "integrated-benefits": "T:Open channel for folks working on integrated benefits to discussD:",
     "cross-brigade-collab": "T:D:All the links you need are in this doc from the conference - Sharing Across Brigades doc:  http://bit.ly/brigadecollab (copy is https://docs.google.com/document/d/13DSB0MFjmKT3_cIoWIXxhrXL6yW_rOLVz8RhWU51ZFk/edit)",
     "successful-brigade-practices": "T:Successful Brigade Practices - a Zoom seriesD:Monthly Zoom series in an ask-me-anything format with Host Bonnie Wolfe, Brigade Captain, Hack for LA",
+    "covid19response": "T:This channel is for sharing information, projects, resources, and asks relative to the COVID-19 emergency. See the pinned post for ways to get plugged in. Please also share projects you're working on.\nD:This channel is to be used for the Brigade response to the COVID-19 pandemic. / Coordination with FEMA",
+    "brigade-infrastructure": "T:https://github.com/codeforamerica/brigade-infrastructure/projects/1 (copy is https://github.com/plocket/brigade-infrastructure)D:Place for the Brigade backbone: tools and infrastructure behind the Brigade network. Project board: https://github.com/codeforamerica/brigade-infrastructure/projects/1",
+    "design-and-research": "T:design and research / every other thursday at 2:30 / schedule here: https://docs.google.com/a/codeforamerica.org/spreadsheets/d/1_F3QfqGg25EjPhgx6DYHYYA9nbgohzIWLix1JUk7YDM/edit?usp=sharingD:",
+    "digital-forms": "T:D:All things forms: Vendor platforms, open source libraries, user research and design resources...",
+    "engineering": "T:D:Generic engineering discussion: Unix, text editor debates, stupid Heroku R12 errors that won't go away, and much more.",
     "placeholder": 1
   },
-  "current_channel": "covid19response",
-  "position": -76398
+  "current_channel": "engineeringhelp",
+  "position": -9095
 }

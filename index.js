@@ -116,6 +116,8 @@ let config = JSON.parse(fs.readFileSync(`./config.json`));
 let state = JSON.parse(fs.readFileSync(`./${ config.state_path }`));
 let page = null;
 
+let went_wrong = [];
+
 const CHANNEL_SCROLLER_SELECTOR = `.p-workspace__primary_view_body .c-scrollbar__hider`;
 
 async function start() {
@@ -124,9 +126,18 @@ async function start() {
   } catch (error) {
     console.log(`x Errored at: ${new Date().toLocaleString()}`);
     await page.screenshot({ path: `page_error.jpg` });
-    const body = await page.evaluate(`body`, (elem)=>{ return elem.outerHTML });
-    console.log(body);
+    // const body = await page.$eval(`body`, (elem)=>{ return elem.outerHTML });
+    // console.log(body);
     throw error;
+  }
+
+  if ( went_wrong.length > 0 ) {
+    `red \x1b[31m reset \x1b[0m`
+    console.log(`\x1b[31mWARNING! Something went wrong. Hopefully more info below.\x1b[0m`);
+    for ( let warning of went_wrong ) {
+      console.log( `- Thread at message id "${ warning.id }" tried to go ${ warning.direction } for too long. It probably got stuck.`);
+    }
+    console.log(`! Ended with warning at: ${new Date().toLocaleString()}`);
   }
   console.log(`✔ Ended at: ${new Date().toLocaleString()}`);
 }
@@ -145,6 +156,7 @@ async function try_to_collect() {
   // Make very big viewport?
   const v_width = 1000
   await page.setViewport({ height: config.viewport_height, width: v_width });
+  console.log(`Position numbers are guesses.`);
   console.log(`The window is ${ config.viewport_height }px tall and ${ v_width }px wide`);
   log.print_inline({ message: 'Starting... ' });
   await go_to_log_in();
@@ -154,7 +166,7 @@ async function try_to_collect() {
   await go_to_channel({ channel_name: state.current_channel });
   log.print_inline({ message: 'Now-ish! \n' });
   await collect_channel({ config, state });
-  log.print_inline({ message: 'Done. Everything is probably fine.\n' });
+  log.print_inline({ message: 'Done. Everything is probably fine...\n' });
 
   // // Prepare for downloading
   // await page._client.send(`Page.setDownloadBehavior`, {
@@ -225,16 +237,10 @@ async function collect_channel({ config, state }) {
     // If reached bottom in previous scroll, finish this round and then stop
     final_round_done = reached_goal;
 
-    console.log(`* channel - collecting at:`, state.position);
-    const top_date = await page.evaluate((elem) => {
-      const date_elem = document.querySelector('.c-button-unstyled.c-message_list__day_divider__label__pill');
-      if ( date_elem && date_elem.textContent ) {
-        return date_elem.textContent;
-      } else {
-        return `not visible`;
-      }
-    }, `.c-button-unstyled.c-message_list__day_divider__label__pill`);
-    console.log(`Current top-most date: ${top_date}`);
+    `blue \x1b[94m reset \x1b[0m`
+    `purple \x1b[35m reset \x1b[0m`
+    console.log(`\x1b[94m* channel - collecting at:\x1b[0m`, state.position);
+    await log_top_date();
     // Collect current view's elements
     let messages = await get_message_container_data();  // name? `get_current_messages_data`
     let threads = await collect_threads({ ids: messages.reply_ids });  // `collect_message_threads`?
@@ -258,6 +264,19 @@ async function collect_channel({ config, state }) {
   }  // ends while need to collect
 };  // Ends collect_channel()
 
+
+async function log_top_date () {
+  const top_date = await page.evaluate((elem) => {
+    const date_elem = document.querySelector('.c-button-unstyled.c-message_list__day_divider__label__pill');
+    if ( date_elem && date_elem.textContent ) {
+      return date_elem.textContent;
+    } else {
+      return `not visible`;
+    }
+  }, `.c-button-unstyled.c-message_list__day_divider__label__pill`);
+  console.log(`Current top-most date: ${top_date}`);
+}
+
 async function scroll_to_start ({ state, config }) {
   log.debug(`scroll_to_start()`);
 
@@ -266,15 +285,18 @@ async function scroll_to_start ({ state, config }) {
     console.log(`\n==== TAKE NOTE!! Starting position is NOT`, 0, `====\n`);
   }
 
-  console.log(`scroll to starting position in the channel "${ state.current_channel }". Starting position is`, state.position);
+  `blue \x1b[94m reset \x1b[0m`
+  console.log(`scroll to starting position in the channel "\x1b[94m${ state.current_channel }\x1b[0m". Starting position is`, state.position);
   // Sometimes page refuses to go a long distance in one go
   let position = 0;
   let goal_position = state.position;
   let scroller_handle = await page.waitForSelector(CHANNEL_SCROLLER_SELECTOR);
+  await log_top_date();
   while ( !await reached_channel_goal({ position, goal_position }) ) {
     position += await scroll_towards({
       position, goal_position, scroller_handle 
     });
+    await log_top_date();
   }
 };
 
@@ -305,7 +327,7 @@ async function scroll_towards ({ position, goal_position, scroller_handle, direc
     element.scrollBy(0, distance_and_direction);
   }, { distance_and_direction });
   // Avoid "Loading replies..."
-  await wait_for_movement({ seconds: 2 });
+  await wait_for_movement({ seconds: 4 });
 
   return distance_and_direction;
 }
@@ -445,11 +467,14 @@ async function collect_thread ({ thread_handle, id }) {
 
     // Scroll to new spot
     position = await scroll_thread_up({ position, thread_handle });
-    if (Math.abs(position) > 30000) {
-      // Assume this thread is shorter than 30,000 pixels. Longer
+    if (Math.abs(position) > 60000) {
+      // Assume this thread is shorter than this many pixels. Longer
       // ones will have to find their own way in the world.
-      abort = true
-      // await page.screenshot({path: `thread_up_${id}_${position}.jpg`});
+      // Or a human should check up on this.
+      console.log( `WARNING: Thread "${ id }" not scrolling up? Check screenshot.`);
+      await page.screenshot({path: `abort_thread_up_${id}_${position}.jpg`});
+      went_wrong.push({ id: id, direction: `up` });
+      abort = true;
     }
     // Decide if this is the last section we'll need to collect
     reached_end = await reached_thread_top({ thread_handle, id });
@@ -466,9 +491,10 @@ async function scroll_to_thread_bottom ({ thread_handle, id, position }) {
     to_thread_bottom_count++;
     if ( to_thread_bottom_count > 100 ) {
       // We're going to assume it's a bug and the thread isn't really
-      // 200,000 pixels tall and there was just a pixel math problem
-      console.log(`Thread with id "${ id }" was too long. Over ${ position } pixels.`)
-      await page.screenshot({path: `scroll_to_thread_bottom_${ id }_${ position }.jpg`});
+      // that tall and there was just a browser problem
+      console.log(`WARNING: Thread "${ id }" not scrolling down? Check screenshot.`);
+      await page.screenshot({path: `abort_scroll_to_thread_bottom_${ id }_${ position }.jpg`});
+      went_wrong.push({ id: id, direction: `down` });
       abort = true;
     }
   }
