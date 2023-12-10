@@ -3,6 +3,8 @@ const fs = require(`fs`);
 require(`dotenv`).config();
 
 // TODO: scroll to find channel
+// TOOD: Move waiting higher up to be more situation specific to
+// speed things up a bit
 
 /*
 TODO: download files
@@ -135,11 +137,12 @@ async function start() {
     `red \x1b[31m reset \x1b[0m`
     console.log(`\x1b[31mWARNING! Something went wrong. Hopefully more info below.\x1b[0m`);
     for ( let warning of went_wrong ) {
-      console.log( `- Thread at message id "${ warning.id }" tried to go ${ warning.direction } for too long. It probably got stuck.`);
+      console.log( `- Thread at message id "${ warning.id }" at channel position ${ warning.position } tried to go ${ warning.direction } for too long. It probably got stuck.`);
     }
     console.log(`! Ended with warning at: ${new Date().toLocaleString()}`);
+  } else {
+    console.log(`✔ Ended at: ${new Date().toLocaleString()}`);
   }
-  console.log(`✔ Ended at: ${new Date().toLocaleString()}`);
 }
 
 async function try_to_collect() {
@@ -237,8 +240,7 @@ async function collect_channel({ config, state }) {
     // If reached bottom in previous scroll, finish this round and then stop
     final_round_done = reached_goal;
 
-    `blue \x1b[94m reset \x1b[0m`
-    `purple \x1b[35m reset \x1b[0m`
+    `blue \x1b[94m reset \x1b[0m`; `purple \x1b[35m reset \x1b[0m`;
     console.log(`\x1b[94m* channel - collecting at:\x1b[0m`, state.position);
     await log_top_date();
     // Collect current view's elements
@@ -283,6 +285,7 @@ async function scroll_to_start ({ state, config }) {
   // I keep forgetting to reset to 0
   if ( state.position !== 0 ) {
     console.log(`\n==== TAKE NOTE!! Starting position is NOT`, 0, `====\n`);
+    console.log('\u0007');
   }
 
   `blue \x1b[94m reset \x1b[0m`
@@ -326,8 +329,8 @@ async function scroll_towards ({ position, goal_position, scroller_handle, direc
   await scroller_handle.evaluate( (element, { distance_and_direction }) => {
     element.scrollBy(0, distance_and_direction);
   }, { distance_and_direction });
-  // Avoid "Loading replies..."
-  await wait_for_movement({ seconds: 4 });
+  // Avoid "Loading replies..." for threads at the very least
+  await wait_for_movement({ seconds: 3 });
 
   return distance_and_direction;
 }
@@ -405,17 +408,24 @@ async function get_message_container_data () {
 
 async function collect_threads ({ ids }) {
   log.debug(`collect_threads()`);
-  let threads = {};
+  const threads_file_path = `${ get_folder_path() }/${ config.threads_path }`;
+  const old_threads = get_value_safely({ file_path: threads_file_path, default_value: {} });
+  let new_threads = {};
   // Click on each thread
   for ( let id of ids ) {
-    console.log(`id of the message that contains this thread:`, id);
-    let thread_handle = await open_thread({ id });
-    // log.print_inline({ message: 't' });
-    let data = await collect_thread({ thread_handle, id });
-    await close_thread({ thread_handle });
-    threads[id] = data;
+    if ( old_threads[ id ] ) {
+      // shave off between 0 and 40 seconds
+      console.log(`thread already collected with id`, id);
+    } else {
+      console.log(`id of the message that contains this thread:`, id);
+      let thread_handle = await open_thread({ id });
+      // log.print_inline({ message: 't' });
+      let data = await collect_thread({ thread_handle, id });
+      await close_thread({ thread_handle });
+      new_threads[id] = data;
+    }
   }
-  return threads;
+  return new_threads;
 }
 
 async function open_thread ({ id }) {
@@ -426,10 +436,22 @@ async function open_thread ({ id }) {
     let elem = document.getElementById(id);
     elem.querySelector('.c-message__reply_count').click();
   }, id );
-  await wait_for_movement({ seconds: 2 });
   let thread_handle = await page.waitForSelector(`div[data-qa="threads_flexpane"]`);
+  // Wait to finish loading thread
+  await wait_for_thread_input({ thread_handle });
   log.debug(`thread_handle:`, thread_handle);
-  return thread_handle
+  return thread_handle;
+}
+
+async function wait_for_thread_input ({ thread_handle }) {
+  let start = Date.now();
+  try {
+    input_handle = await thread_handle.waitForSelector(`div[data-item-key="input"]`);
+    return input_handle;
+  } catch (error) {
+    console.log(`Thread reply input not found in ${ Date.now() - start } ms.`);
+    return null;
+  }
 }
 
 async function collect_thread ({ thread_handle, id }) {
@@ -473,8 +495,12 @@ async function collect_thread ({ thread_handle, id }) {
       // Or a human should check up on this.
       console.log( `WARNING: Thread "${ id }" not scrolling up? Check screenshot.`);
       await page.screenshot({path: `abort_thread_up_${id}_${position}.jpg`});
-      went_wrong.push({ id: id, direction: `up` });
+      went_wrong.push({ id: id, direction: `up`, position: state.position });
       abort = true;
+      console.log('\u0007');
+      console.log('\u0007');
+      console.log('\u0007');
+      throw `Infinite up`;
     }
     // Decide if this is the last section we'll need to collect
     reached_end = await reached_thread_top({ thread_handle, id });
@@ -489,36 +515,30 @@ async function scroll_to_thread_bottom ({ thread_handle, id, position }) {
   while ( !await reached_thread_bottom({ thread_handle }) && !abort ) {
     position = await scroll_thread_down({ position, thread_handle });
     to_thread_bottom_count++;
-    if ( to_thread_bottom_count > 100 ) {
+    if ( to_thread_bottom_count > 20 ) {
       // We're going to assume it's a bug and the thread isn't really
       // that tall and there was just a browser problem
       console.log(`WARNING: Thread "${ id }" not scrolling down? Check screenshot.`);
       await page.screenshot({path: `abort_scroll_to_thread_bottom_${ id }_${ position }.jpg`});
-      went_wrong.push({ id: id, direction: `down` });
+      went_wrong.push({ id: id, direction: `down`, position: state.position });
       abort = true;
+      console.log('\u0007');
+      console.log('\u0007');
+      console.log('\u0007');
+      throw `Infinite down`;
     }
   }
 }
 
-// temp debugging
-// let count = 0;
 async function reached_thread_bottom ({ thread_handle }) {
   log.debug(`reached_thread_bottom()`);
-  // temp debugging
   // console.log( thread_handle );
 
-  // Might (rarely) be `null``
-  const input_handle = await thread_handle.$(`div[data-item-key="input"]`);
+  // Might (rarely) be `null`
+  const input_handle = await wait_for_thread_input({ thread_handle });
   log.debug(`thread input handle:`, input_handle);
   // console.log( '----------', input_handle );
   if ( !input_handle ) {
-    // temp debugging
-    // await page.screenshot({path: `reached_thread_bottom_${count}.jpg`});
-    // console.log(await thread_handle.evaluate((elem)=>{return elem.outerHTML}));
-    // count++;
-
-    // I'm not absolutely sure why this sometimes isn't there. I suspect it's
-    // when the thread is too long, so we'll return that it's not the bottom.
     // Infinite loop should be prevented higher up.
     return false;
   }
@@ -527,22 +547,19 @@ async function reached_thread_bottom ({ thread_handle }) {
   // will be able to match input_top
   const reached_bottom = await input_handle.evaluate((input, thread) => {
     // Fragile
-
-    // const input = thread.querySelector(`div[data-item-key="input"]`);
     const input_top = parseInt(window.getComputedStyle(input).getPropertyValue('top').replace('px', ''));
-
     // Get all thread posts
     const posts = Array.from(thread.querySelectorAll(`.c-virtual_list__item`));
     // For each thread post, check if its top matches the calculation
     for ( let post of posts ) {
       const item_bottom = post.clientHeight + parseInt(window.getComputedStyle(post).getPropertyValue('top').replace('px', ''))
-      if ( item_bottom >= input_top ) {
-        console.log( `\n\n`, post, `\n\n` );
+      if ( item_bottom >= input_top || item_bottom >= (input_top - 1) ) {
+        console.log( `\n\n`, post, `\n\n` );  // log to browser console
         return true;
       }
     }
     return false;
-  }, thread_handle);
+  }, thread_handle);  // ends evaluate
   log.debug(`reached_bottom:`, reached_bottom);
   return reached_bottom;
 }
@@ -586,12 +603,18 @@ async function close_thread ({ thread_handle }) {
 async function wait_for_movement ({ seconds }) {
   /** Wait, but with a clearer name. **/
   log.debug(`wait_for_movement()`);
-  await wait_for_load({ seconds });
+  await wait_for_seconds({ seconds });
 }
 
 async function wait_for_load ({ seconds }) {
   /** Wait, but with a clearer name. **/
   log.debug(`wait_for_load()`);
+  await wait_for_seconds({ seconds });
+}
+
+async function wait_for_seconds ({ seconds }) {
+  /** Wait, but don't deal with milliseconds. **/
+  if ( seconds === undefined ) { seconds = 1; }
   await page.waitForTimeout( 1000 * seconds );
 }
 
@@ -599,7 +622,7 @@ function save_data ({ config, state, data }) {
   /** `data` {obj} - .messages and .threads */
   log.debug(`save_data()`);
 
-  let folder_path = `data/${ state.current_channel }`;
+  const folder_path = get_folder_path();
   ensure_dir_exists({ dir_path: folder_path })
 
   // List of message groups html
@@ -620,6 +643,10 @@ function save_data ({ config, state, data }) {
     file_path: threads_file_path,
     contents: JSON.stringify( new_threads, null, 2 ),
   });
+}
+
+function get_folder_path () {
+  return `data/${ state.current_channel }`;
 }
 
 function save_state ({ config, state }) {
