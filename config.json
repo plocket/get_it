@@ -5,30 +5,22 @@
   "viewport_height": 2000,
   "travel_distance": "top",
   "todo": {
-
-    "accessibility": 1,
-    "brigade-project-index": "T:https://brigade.cloud/projects/\n\nhttps://drive.google.com/drive/folders/1yaJe0QQSEw_fKljTJ719o9hQlJAKwGr5?usp=sharing\n\nMeet every other Wed (ref to 7/14/21) @ 6pm EST https://codeforamerica.zoom.us/j/96551956929?pwd=ME81S0ZUT1UwY3JTeFpaVXVZV25pdz09\nD:Discussion and coordination around a comprehensive index of brigade projects. As of July 2021 this initiative includes index backend, index UI, PublicCode and Taxonomy.\n\nSee more at https://brigade.cloud/projects/",
-    "policy-politics": 1,
-    "code-for-pawnee": 1,
-    "decidim": 1,
-    "congress-meets-code": "Techniques for building partnerships with the US Congress AND connecting local Brigades with the district staffers near them. For the multi-Brigade collaborative project partnering with Congressional staffers, see #policy-politics.",
-    "network-revisioning-datateam": "T:D:",
-    "engineering": "T:D:Generic engineering discussion: Unix, text editor debates, stupid Heroku R12 errors that won't go away, and much more.",
-    "engineeringhelp": "T:D:Channel for Fellows to ask Engineering questions and troubleshoot errors",
-
-    "brigade-congress-contentcommittee": "T:D:",
-    "random": "T:Random, off-topic, chatty things.D:A place for non-work banter, links, articles of interest, humor or anything else which you'd like concentrated in some place other than work-related channels.",
-    "template": "T:D:",
-    "announcements": "T:D:"
+    "organizers-playbook": "",
+    "brigade-newsletters": "T:Add a newsletter to this channel with `/feed subscribe [url]` or by subscribing `brigadenewsletters.uxs9n@zapiermail.com` to a list.;D:Aggregate newsletters from all the brigades into a single place",
+    "ndoch-journey-mapping": "",
+    "ndoch-know-your-rights": "",
+    "ndoch-usability-scorecard": "",
+    "new-york-city": "T:FSU'ing with a bagel and lox.;D:This is a slack channel dedicated to CfA friends and family in NYC.",
+    "random": "T:Random, off-topic, chatty things.;D:A place for non-work banter, links, articles of interest, humor or anything else which you'd like concentrated in some place other than work-related channels.",
+    "template": "T:;D:",
+    "announcements": "T:;D:"
   },
   "requested_todo": {
-
   },
   "requested_done": {
-    "x brigade-project-index": "T:https://brigade.cloud/projects/\n\nhttps://drive.google.com/drive/folders/1yaJe0QQSEw_fKljTJ719o9hQlJAKwGr5?usp=sharing\n\nMeet every other Wed (ref to 7/14/21) @ 6pm EST https://codeforamerica.zoom.us/j/96551956929?pwd=ME81S0ZUT1UwY3JTeFpaVXVZV25pdz09\nD:Discussion and coordination around a comprehensive index of brigade projects. As of July 2021 this initiative includes index backend, index UI, PublicCode and Taxonomy.\n\nSee more at https://brigade.cloud/projects/",
-
+    "brigade-project-index": "T:https://brigade.cloud/projects/\n\nhttps://drive.google.com/drive/folders/1yaJe0QQSEw_fKljTJ719o9hQlJAKwGr5?usp=sharing\n\nMeet every other Wed (ref to 7/14/21) @ 6pm EST https://codeforamerica.zoom.us/j/96551956929?pwd=ME81S0ZUT1UwY3JTeFpaVXVZV25pdz09\n;D:Discussion and coordination around a comprehensive index of brigade projects. As of July 2021 this initiative includes index backend, index UI, PublicCode and Taxonomy.\n\nSee more at https://brigade.cloud/projects/",
     "justice-at-cfa": 1,
-    "solutions-journalism": "T:D:Place in Slack for discussions about Solutions Journalism BAT",
-    "brigade-infrastructure": "T:https://github.com/codeforamerica/brigade-infrastructure/projects/1 (copy is https://github.com/plocket/brigade-infrastructure)D:Place for the Brigade backbone: tools and infrastructure behind the Brigade network. Project board: https://github.com/codeforamerica/brigade-infrastructure/projects/1"
+    "solutions-journalism": "T:;D:Place in Slack for discussions about Solutions Journalism BAT",
+    "brigade-infrastructure": "T:https://github.com/codeforamerica/brigade-infrastructure/projects/1 (copy is https://github.com/plocket/brigade-infrastructure);D:Place for the Brigade backbone: tools and infrastructure behind the Brigade network. Project board: https://github.com/codeforamerica/brigade-infrastructure/projects/1"
   }
 }

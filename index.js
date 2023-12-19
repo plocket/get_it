@@ -9,6 +9,9 @@ require(`dotenv`).config();
 /*
 TODO: download files
 
+Detect done downloading:
+  - https://stackoverflow.com/a/74107205
+
 Second thoughts:
 WARNING!: When there are only a few files, there's no "show more" button
 https://app.slack.com/client/T024F66L9/search
@@ -147,12 +150,20 @@ async function start() {
 
 async function try_to_collect() {
   log.debug(`start()`);
+
   const browser = await puppeteer.launch({
     // Have to interact with the browser prompt manually
     headless: !process.env.DEBUG,
     devtools: process.env.DEBUG,
   });
   page = await browser.newPage();
+
+  // I keep forgetting to reset to 0
+  if ( state.position !== 0 ) {
+    console.log(`\n==== TAKE NOTE!! Starting position is NOT`, 0, `====`);
+    console.log('\u0007');  // beep
+  }
+    console.log(`Collecting channel "\x1b[94m${ state.current_channel }\x1b[0m" starting at approximately `, state.position, `px`);
 
   console.log(`Current date and time: ${new Date().toLocaleString()}`);
 
@@ -174,7 +185,7 @@ async function try_to_collect() {
   // // Prepare for downloading
   // await page._client.send(`Page.setDownloadBehavior`, {
   //   behavior: `allow`,
-  //   downloadPath: `./data/${ state.current_channel }/downloads`,
+  //   downloadPath: `./data_local/${ state.current_channel }/downloads`,
   // });
   // // Download files
 
@@ -281,12 +292,6 @@ async function log_top_date () {
 
 async function scroll_to_start ({ state, config }) {
   log.debug(`scroll_to_start()`);
-
-  // I keep forgetting to reset to 0
-  if ( state.position !== 0 ) {
-    console.log(`\n==== TAKE NOTE!! Starting position is NOT`, 0, `====\n`);
-    console.log('\u0007');
-  }
 
   `blue \x1b[94m reset \x1b[0m`
   console.log(`scroll to starting position in the channel "\x1b[94m${ state.current_channel }\x1b[0m". Starting position is`, state.position);
@@ -497,10 +502,16 @@ async function collect_thread ({ thread_handle, id }) {
       await page.screenshot({path: `abort_thread_up_${id}_${position}.jpg`});
       went_wrong.push({ id: id, direction: `up`, position: state.position });
       abort = true;
+      // beep
       console.log('\u0007');
       console.log('\u0007');
       console.log('\u0007');
       throw `Infinite up`;
+    }
+    // If the thread has "scrolled" this much, it might just need more time to load
+    if (Math.abs(position) > 20000) {
+      console.log('Slowing down');
+      await wait_for_movement(10);
     }
     // Decide if this is the last section we'll need to collect
     reached_end = await reached_thread_top({ thread_handle, id });
@@ -515,7 +526,7 @@ async function scroll_to_thread_bottom ({ thread_handle, id, position }) {
   while ( !await reached_thread_bottom({ thread_handle }) && !abort ) {
     position = await scroll_thread_down({ position, thread_handle });
     to_thread_bottom_count++;
-    if ( to_thread_bottom_count > 20 ) {
+    if ( to_thread_bottom_count > 30 ) {
       // We're going to assume it's a bug and the thread isn't really
       // that tall and there was just a browser problem
       console.log(`WARNING: Thread "${ id }" not scrolling down? Check screenshot.`);
