@@ -384,7 +384,15 @@ function calculate_scroll_distance ({ current_position, goal_position, scroller_
 async function reached_channel_goal ({ position, goal_position }) {
   log.debug(`reached_channel_goal()`);
   let reached_end = false;
+  // Regular channel
   let top = await page.$(`h1.p-message_pane__foreword__title`);
+  // DMs
+  if ( !top ) {
+    try {
+      top = await page.$(`.p-message_pane__foreword__description`);
+    } catch (error) {}
+  }
+
   if ( top ) {
     console.log(`--- reached top of channel ---`);
     // log.debug(`--- at top of channel ---`);
