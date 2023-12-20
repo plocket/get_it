@@ -130,7 +130,7 @@ async function start() {
     await try_to_collect();
   } catch (error) {
     console.log(`x Errored at: ${new Date().toLocaleString()}`);
-    await page.screenshot({ path: `page_error.jpg` });
+    // await page.screenshot({ path: `page_error.jpg` });
     // const body = await page.$eval(`body`, (elem)=>{ return elem.outerHTML });
     // console.log(body);
     throw error;

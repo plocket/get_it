@@ -5,7 +5,9 @@
   "viewport_height": 2000,
   "travel_distance": "top",
   "todo": {
-    "organizers-playbook": "",
+    "brigade-project-index-firehose": "T:;D:",
+    
+    "brigade-project-canvases": "T:;D:",
     "brigade-newsletters": "T:Add a newsletter to this channel with `/feed subscribe [url]` or by subscribing `brigadenewsletters.uxs9n@zapiermail.com` to a list.;D:Aggregate newsletters from all the brigades into a single place",
     "ndoch-journey-mapping": "",
     "ndoch-know-your-rights": "",
